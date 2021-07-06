@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -8,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 )
+
+const GITDIR string = ".gggit"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -51,37 +55,6 @@ func main() {
 	}
 }
 
-func createRepository(path string) (string, error) {
-	var err error
-	if path == "" {
-		path, err = os.Getwd()
-		if err != nil {
-			return "", err
-		}
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return "", errors.New("specified directory does not exist")
-	}
-	gitdir := filepath.Join(path, ".gggit/")
-	if _, err := os.Stat(gitdir); !os.IsNotExist(err) {
-		return "", errors.New(fmt.Sprintf(".gggit/ directory already exists at %v\n", path))
-	}
-	os.Mkdir(gitdir, 0755)
-	os.Mkdir(filepath.Join(gitdir, "objects"), 0755)
-	os.Mkdir(filepath.Join(gitdir, "branches"), 0755)
-	os.MkdirAll(filepath.Join(gitdir, "refs", "tags"), 0755)
-	os.MkdirAll(filepath.Join(gitdir, "refs", "heads"), 0755)
-	headf, _ := os.Create(filepath.Join(gitdir, "HEAD"))
-	headf.WriteString("ref: refs/heads/master\n")
-	descf, _ := os.Create(filepath.Join(gitdir, "description"))
-	descf.WriteString("Unnamed repository; edit this file 'description' to name the repository.\n")
-	return path, nil
-}
-
-func hashData(data []byte) string {
-	return fmt.Sprintf("%x", sha1.Sum(data))
-}
-
 func cmd_add(args []string) {
 	fmt.Println("add")
 }
@@ -99,12 +72,19 @@ func cmd_hash(args []string) {
 		fmt.Println("You should provide name of a file to hash.")
 		return
 	}
-	data, err := ioutil.ReadFile(args[0]) // just pass the file name
+	var hash string
+	var err  error
+	// Do not write by default.
+	if len(args) == 1 {
+		hash, err = hashFile(args[0], false)
+	} else if args[0] == "-w" {
+		hash, err = hashFile(args[1], true)
+	}
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(hashData(data))
+	fmt.Println(hash)
 }
 func cmd_init(args []string) {
 	path, err := createRepository("")
@@ -137,4 +117,125 @@ func cmd_show(args []string) {
 }
 func cmd_tag(args []string) {
 	fmt.Println("tag")
+}
+
+type Object struct {
+	content []byte
+	hash    string
+}
+
+func (o Object) write() (string, error) {
+	gitDir, err := getGitDir("")
+	if err != nil {
+		return "", err
+	}
+	objectDir := filepath.Join(gitDir, "objects")
+	objectSubDir := filepath.Join(objectDir, o.hash[:2])
+	// Create a subdirectory.
+	if _, err := os.ReadDir(objectSubDir); os.IsNotExist(err) {
+		err := os.Mkdir(objectSubDir, 0755)
+		if err != nil {
+			return "", err
+		}
+	}
+	objectFileName := filepath.Join(objectSubDir, o.hash[2:])
+	if _, err := os.Stat(objectFileName); os.IsExist(err) {
+		// Skip if file already exists.
+		return o.hash, nil
+	}
+	objfile, err := os.Create(objectFileName)
+	if err != nil {
+		return "", err
+	}
+
+	// Compress o.content with zlib.
+	var buf bytes.Buffer
+	writer := zlib.NewWriter(&buf)
+	_, err := writer.Write(o.content)
+	if err != nil {
+		return "", err
+	}
+	writer.Close()
+
+	_, err = objfile.Write(buf.Bytes())
+	if err != nil {
+		return "", err
+	}
+	return o.hash, nil
+}
+
+func getGitDir(path string) (string, error) {
+	var err error
+	if path == "" {
+		path, err = os.Getwd()
+		if err != nil {
+			return "", err
+		}
+	}
+	gitPath := filepath.Join(path, GITDIR)
+	if _, err = os.ReadDir(gitPath); os.IsNotExist(err) {
+		if path == "/" {
+			return "", errors.New("did not find git directory")
+		} else {
+			return getGitDir(filepath.Dir(path))
+		}
+	}
+	return gitPath, nil
+}
+
+func createRepository(path string) (string, error) {
+	var err error
+	if path == "" {
+		path, err = os.Getwd()
+		if err != nil {
+			return "", err
+		}
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return "", errors.New("specified directory does not exist")
+	}
+	gitdir := filepath.Join(path, GITDIR)
+	if _, err := os.Stat(gitdir); !os.IsNotExist(err) {
+		return "", errors.New(fmt.Sprintf("git directory already exists at %v\n", path))
+	}
+	os.Mkdir(gitdir, 0755)
+	os.Mkdir(filepath.Join(gitdir, "objects"), 0755)
+	os.Mkdir(filepath.Join(gitdir, "branches"), 0755)
+	os.MkdirAll(filepath.Join(gitdir, "refs", "tags"), 0755)
+	os.MkdirAll(filepath.Join(gitdir, "refs", "heads"), 0755)
+	headf, _ := os.Create(filepath.Join(gitdir, "HEAD"))
+	headf.WriteString("ref: refs/heads/master\n")
+	descf, _ := os.Create(filepath.Join(gitdir, "description"))
+	descf.WriteString("Unnamed repository; edit this file 'description' to name the repository.\n")
+	return path, nil
+}
+
+func hashFile(path string, write bool) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	obj, err := createBlob(content)
+	if err != nil {
+		return "", err
+	}
+	if write {
+		_, err := obj.write()
+		if err != nil {
+			return "", err
+		}
+	}
+	return obj.hash, nil
+}
+
+func createBlob(content []byte) (Object, error) {
+	var newBlob = Object{}
+	header := []byte(fmt.Sprintf("blob %d\000", len(content)))
+	newBlob.content = append(header, content...)
+	newBlob.hash = fmt.Sprintf("%x", hashData(newBlob.content))
+	return newBlob, nil
+}
+
+func hashData(data []byte) [sha1.Size]byte {
+	return sha1.Sum(data)
 }

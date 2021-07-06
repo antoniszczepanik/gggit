@@ -9,10 +9,9 @@ import (
 
 func TestCreateRepository(t *testing.T) {
 	cwd, _ := os.Getwd()
-	test_directory := filepath.Join(cwd, "testdir")
-	os.Mkdir(test_directory, 0755)
-	defer os.RemoveAll(test_directory)
-
+	testDir := filepath.Join(cwd, "testdir")
+	os.Mkdir(testDir, 0755)
+	defer os.RemoveAll(testDir)
 
 	type testCase struct {
 		path  string
@@ -29,7 +28,7 @@ func TestCreateRepository(t *testing.T) {
 		{path: ".gggit/description", isDir: false},
 	}
 
-	repoPath, err := createRepository(test_directory)
+	repoPath, err := createRepository(testDir)
 	if err != nil {
 		t.Errorf("error creating the repository: %v\n", err)
 		return
@@ -47,4 +46,35 @@ func TestCreateRepository(t *testing.T) {
 			return
 		}
 	}
+}
+
+func TestHashObject(t *testing.T) {
+	cwd, _ := os.Getwd()
+
+	testDir := filepath.Join(cwd, "testdir")
+	os.Mkdir(testDir, 0755)
+	defer os.RemoveAll(testDir)
+	os.Chdir(testDir)
+	_, err := createRepository(testDir)
+	if err != nil {
+		t.Errorf("error creating the repository: %v\n", err)
+		return
+	}
+
+	test_file := filepath.Join(testDir, "test_file.txt")
+	f, err := os.Create(test_file)
+	if err != nil {
+		t.Error("hash-object fail: cannot create object to hash")
+	}
+	defer f.Close()
+
+	_, err2 := f.WriteString("Ptaki latają kluczem\n")
+
+	if err2 != nil {
+		t.Error("hash-object fail: cannot write to object to hash")
+	}
+	// TODO:
+	// Hash object.
+	// Check if it was created with the proper name in proper subdir.
+	// Cat object and verify if contents match.
 }
