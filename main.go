@@ -6,7 +6,6 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -59,7 +58,16 @@ func cmd_add(args []string) {
 	fmt.Println("add")
 }
 func cmd_cat(args []string) {
-	fmt.Println("cat-file")
+	if len(args) != 1 {
+		fmt.Println("You should provide hash of object to cat.")
+		return
+	}
+	object := Object{}
+	if err := object.read(args[0]); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Print(object.content)
 }
 func cmd_checkout(args []string) {
 	fmt.Println("checkout")
@@ -73,12 +81,15 @@ func cmd_hash(args []string) {
 		return
 	}
 	var hash string
-	var err  error
+	var err error
 	// Do not write by default.
 	if len(args) == 1 {
 		hash, err = hashFile(args[0], false)
 	} else if args[0] == "-w" {
 		hash, err = hashFile(args[1], true)
+	} else {
+		fmt.Println(args[0], "not supported. Did you mean sth else?")
+		return
 	}
 	if err != nil {
 		fmt.Println(err)
@@ -98,7 +109,7 @@ func cmd_log(args []string) {
 	fmt.Println("log")
 }
 func cmd_ls(args []string) {
-	fmt.Println("ls...")
+	fmt.Println("ls-tree")
 }
 func cmd_merge(args []string) {
 	fmt.Println("merge")
@@ -120,48 +131,131 @@ func cmd_tag(args []string) {
 }
 
 type Object struct {
-	content []byte
-	hash    string
+	objectType string
+	content    []byte
 }
 
-func (o Object) write() (string, error) {
+func (o Object) getHash() (string, error) {
+	if o.content == nil {
+		return "", errors.New("cannot hash object without content")
+	}
+	fullContent := o.getFullContent()
+	return fmt.Sprintf("%x", sha1.Sum(fullContent)), nil
+
+}
+
+func (o Object) write() error {
+	objectDir, err := getGitSubdir("objects")
+	if err != nil {
+		return err
+	}
+	hash, err := o.getHash()
+	if err != nil {
+		return err
+	}
+	objectSubDir := filepath.Join(objectDir, hash[:2])
+	// Create a subdirectory if does not exist.
+	if _, err := os.ReadDir(objectSubDir); os.IsNotExist(err) {
+		err := os.Mkdir(objectSubDir, 0755)
+		if err != nil {
+			return err
+		}
+	}
+	objectFileName := filepath.Join(objectSubDir, hash[2:])
+
+	// Skip if file already exists.
+	if _, err := os.Stat(objectFileName); os.IsExist(err) {
+		return nil
+	}
+	// Otherwise create a file
+	objfile, err := os.Create(objectFileName)
+	if err != nil {
+		return err
+	}
+	// Compress o.content with zlib.
+	var buf bytes.Buffer
+	writer := zlib.NewWriter(&buf)
+	_, err = writer.Write(o.getFullContent())
+	if err != nil {
+		return err
+	}
+	writer.Close()
+
+	// Write compressed contents to objfile.
+	_, err = objfile.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Object) read(hash string) error {
+	objectDir, err := getGitSubdir("objects")
+	if err != nil {
+		return err
+	}
+	objectSubDir := filepath.Join(objectDir, hash[:2])
+	if _, err := os.Stat(objectSubDir); os.IsNotExist(err) {
+		return errors.New(fmt.Sprintf("object %s does not exist", hash))
+	}
+
+	objectPath := filepath.Join(objectSubDir, hash[2:])
+	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
+		return errors.New(fmt.Sprintf("object %s does not exist", hash))
+	}
+
+	// Read with zlib
+	writer := zlib.NewReader(&buf)
+	_, err = writer.Write(o.getFullContent())
+	if err != nil {
+		return err
+	}
+	writer.Close()
+
+	// Write compressed contents to objfile.
+	_, err = objfile.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	return nil
+	// Split to header and content
+	// Parse header contents object type
+
+	return errors.New(fmt.Sprintf("%s not implemented yet", hash))
+}
+
+// Recursively find .gggit directory and return subdirName path.
+func getGitSubdir(subdirName string) (string, error) {
 	gitDir, err := getGitDir("")
 	if err != nil {
 		return "", err
 	}
-	objectDir := filepath.Join(gitDir, "objects")
-	objectSubDir := filepath.Join(objectDir, o.hash[:2])
-	// Create a subdirectory.
-	if _, err := os.ReadDir(objectSubDir); os.IsNotExist(err) {
-		err := os.Mkdir(objectSubDir, 0755)
-		if err != nil {
-			return "", err
-		}
+	subDir := filepath.Join(gitDir, subdirName)
+	if _, err := os.Stat(subDir); os.IsNotExist(err) {
+		return "", errors.New(fmt.Sprintf("directory %s does not exist", subDir))
 	}
-	objectFileName := filepath.Join(objectSubDir, o.hash[2:])
-	if _, err := os.Stat(objectFileName); os.IsExist(err) {
-		// Skip if file already exists.
-		return o.hash, nil
-	}
-	objfile, err := os.Create(objectFileName)
-	if err != nil {
-		return "", err
-	}
+	return subDir, nil
+}
 
-	// Compress o.content with zlib.
-	var buf bytes.Buffer
-	writer := zlib.NewWriter(&buf)
-	_, err := writer.Write(o.content)
-	if err != nil {
-		return "", err
-	}
-	writer.Close()
 
-	_, err = objfile.Write(buf.Bytes())
+// Create Object from contents of a file. This will automatically become a
+// blob object.
+func (o *Object) fromFile(path string) error {
+	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return o.hash, nil
+	o.content = content
+	o.objectType = "blob"
+	return nil
+}
+
+func (o Object) getHeader() []byte {
+	return []byte(fmt.Sprintf("%s %d\000",o.objectType, len(o.content)))
+}
+
+func (o Object) getFullContent() []byte {
+	return append(o.getHeader(), o.content...)
 }
 
 func getGitDir(path string) (string, error) {
@@ -211,31 +305,18 @@ func createRepository(path string) (string, error) {
 }
 
 func hashFile(path string, write bool) (string, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	obj, err := createBlob(content)
-	if err != nil {
-		return "", err
+	fileObject := Object{}
+	if err := fileObject.fromFile(path); err != nil {
+		return "" , err
 	}
 	if write {
-		_, err := obj.write()
-		if err != nil {
+		if err:= fileObject.write(); err != nil {
 			return "", err
 		}
 	}
-	return obj.hash, nil
-}
-
-func createBlob(content []byte) (Object, error) {
-	var newBlob = Object{}
-	header := []byte(fmt.Sprintf("blob %d\000", len(content)))
-	newBlob.content = append(header, content...)
-	newBlob.hash = fmt.Sprintf("%x", hashData(newBlob.content))
-	return newBlob, nil
-}
-
-func hashData(data []byte) [sha1.Size]byte {
-	return sha1.Sum(data)
+	hash, err := fileObject.getHash()
+	if err != nil {
+		return "", err
+	}
+	return hash, nil
 }
