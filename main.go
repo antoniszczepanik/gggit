@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"compress/zlib"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"os"
@@ -62,12 +59,17 @@ func cmd_cat(args []string) {
 		fmt.Println("You should provide hash of object to cat.")
 		return
 	}
-	object := Object{}
-	if err := object.read(args[0]); err != nil {
+	o, err := ReadObject(args[0])
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Print(object.content)
+	content, err := o.GetContent()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Print(string(content))
 }
 func cmd_checkout(args []string) {
 	fmt.Println("checkout")
@@ -98,12 +100,12 @@ func cmd_hash(args []string) {
 	fmt.Println(hash)
 }
 func cmd_init(args []string) {
-	path, err := createRepository("")
+	path, err := initRepository("")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Created repository at %v\n", path)
+	fmt.Printf("Created new repository at %v\n", path)
 }
 func cmd_log(args []string) {
 	fmt.Println("log")
@@ -130,154 +132,7 @@ func cmd_tag(args []string) {
 	fmt.Println("tag")
 }
 
-type Object struct {
-	objectType string
-	content    []byte
-}
-
-func (o Object) getHash() (string, error) {
-	if o.content == nil {
-		return "", errors.New("cannot hash object without content")
-	}
-	fullContent := o.getFullContent()
-	return fmt.Sprintf("%x", sha1.Sum(fullContent)), nil
-
-}
-
-func (o Object) write() error {
-	objectDir, err := getGitSubdir("objects")
-	if err != nil {
-		return err
-	}
-	hash, err := o.getHash()
-	if err != nil {
-		return err
-	}
-	objectSubDir := filepath.Join(objectDir, hash[:2])
-	// Create a subdirectory if does not exist.
-	if _, err := os.ReadDir(objectSubDir); os.IsNotExist(err) {
-		err := os.Mkdir(objectSubDir, 0755)
-		if err != nil {
-			return err
-		}
-	}
-	objectFileName := filepath.Join(objectSubDir, hash[2:])
-
-	// Skip if file already exists.
-	if _, err := os.Stat(objectFileName); os.IsExist(err) {
-		return nil
-	}
-	// Otherwise create a file
-	objfile, err := os.Create(objectFileName)
-	if err != nil {
-		return err
-	}
-	// Compress o.content with zlib.
-	var buf bytes.Buffer
-	writer := zlib.NewWriter(&buf)
-	_, err = writer.Write(o.getFullContent())
-	if err != nil {
-		return err
-	}
-	writer.Close()
-
-	// Write compressed contents to objfile.
-	_, err = objfile.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (o *Object) read(hash string) error {
-	objectDir, err := getGitSubdir("objects")
-	if err != nil {
-		return err
-	}
-	objectSubDir := filepath.Join(objectDir, hash[:2])
-	if _, err := os.Stat(objectSubDir); os.IsNotExist(err) {
-		return errors.New(fmt.Sprintf("object %s does not exist", hash))
-	}
-
-	objectPath := filepath.Join(objectSubDir, hash[2:])
-	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
-		return errors.New(fmt.Sprintf("object %s does not exist", hash))
-	}
-
-	// Read with zlib
-	writer := zlib.NewReader(&buf)
-	_, err = writer.Write(o.getFullContent())
-	if err != nil {
-		return err
-	}
-	writer.Close()
-
-	// Write compressed contents to objfile.
-	_, err = objfile.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	return nil
-	// Split to header and content
-	// Parse header contents object type
-
-	return errors.New(fmt.Sprintf("%s not implemented yet", hash))
-}
-
-// Recursively find .gggit directory and return subdirName path.
-func getGitSubdir(subdirName string) (string, error) {
-	gitDir, err := getGitDir("")
-	if err != nil {
-		return "", err
-	}
-	subDir := filepath.Join(gitDir, subdirName)
-	if _, err := os.Stat(subDir); os.IsNotExist(err) {
-		return "", errors.New(fmt.Sprintf("directory %s does not exist", subDir))
-	}
-	return subDir, nil
-}
-
-
-// Create Object from contents of a file. This will automatically become a
-// blob object.
-func (o *Object) fromFile(path string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	o.content = content
-	o.objectType = "blob"
-	return nil
-}
-
-func (o Object) getHeader() []byte {
-	return []byte(fmt.Sprintf("%s %d\000",o.objectType, len(o.content)))
-}
-
-func (o Object) getFullContent() []byte {
-	return append(o.getHeader(), o.content...)
-}
-
-func getGitDir(path string) (string, error) {
-	var err error
-	if path == "" {
-		path, err = os.Getwd()
-		if err != nil {
-			return "", err
-		}
-	}
-	gitPath := filepath.Join(path, GITDIR)
-	if _, err = os.ReadDir(gitPath); os.IsNotExist(err) {
-		if path == "/" {
-			return "", errors.New("did not find git directory")
-		} else {
-			return getGitDir(filepath.Dir(path))
-		}
-	}
-	return gitPath, nil
-}
-
-func createRepository(path string) (string, error) {
+func initRepository(path string) (string, error) {
 	var err error
 	if path == "" {
 		path, err = os.Getwd()
@@ -305,18 +160,47 @@ func createRepository(path string) (string, error) {
 }
 
 func hashFile(path string, write bool) (string, error) {
-	fileObject := Object{}
-	if err := fileObject.fromFile(path); err != nil {
-		return "" , err
-	}
-	if write {
-		if err:= fileObject.write(); err != nil {
-			return "", err
-		}
-	}
-	hash, err := fileObject.getHash()
+	object, err := CreateBlobObject(path)
 	if err != nil {
 		return "", err
 	}
-	return hash, nil
+	if write {
+		if err := Write(object); err != nil {
+			return "", err
+		}
+	}
+	return GetHash(object)
+}
+
+// Find git directory and return its specific subdirectory.
+func GetGitSubdir(subdirName string) (string, error) {
+	gitDir, err := getGitDir("")
+	if err != nil {
+		return "", err
+	}
+	subDir := filepath.Join(gitDir, subdirName)
+	if _, err := os.Stat(subDir); os.IsNotExist(err) {
+		return "", errors.New(fmt.Sprintf("directory %s does not exist", subDir))
+	}
+	return subDir, nil
+}
+
+// Recursively try to find git directory in current or parent directory.
+func getGitDir(path string) (string, error) {
+	var err error
+	if path == "" {
+		path, err = os.Getwd()
+		if err != nil {
+			return "", err
+		}
+	}
+	gitPath := filepath.Join(path, GITDIR)
+	if _, err = os.ReadDir(gitPath); os.IsNotExist(err) {
+		if path == "/" {
+			return "", errors.New("did not find git directory")
+		} else {
+			return getGitDir(filepath.Dir(path))
+		}
+	}
+	return gitPath, nil
 }
