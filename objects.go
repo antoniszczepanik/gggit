@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 type Object interface {
@@ -38,7 +38,6 @@ func (t Tree) GetContent() ([]byte, error) {
 }
 
 func (t Tree) GetType() string {
-	//TODO: Implement me.
 	return "tree"
 }
 
@@ -51,7 +50,6 @@ func (t Commit) GetContent() ([]byte, error) {
 }
 
 func (t Commit) GetType() string {
-	//TODO: Implement me.
 	return "commit"
 }
 
@@ -68,15 +66,19 @@ func Write(o Object) error {
 	if err != nil {
 		return err
 	}
-	objectSubDir := filepath.Join(objectDir, hash[:2])
+	objectSubDir, objectName, err := splitHash(hash)
+	if err != nil {
+		return err
+	}
+	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
 	// Create a subdirectory if does not exist.
-	if _, err := os.ReadDir(objectSubDir); os.IsNotExist(err) {
-		err := os.Mkdir(objectSubDir, 0755)
+	if _, err := os.ReadDir(objectSubDirPath); os.IsNotExist(err) {
+		err = os.Mkdir(objectSubDirPath, 0755)
 		if err != nil {
 			return err
 		}
 	}
-	objectFileName := filepath.Join(objectSubDir, hash[2:])
+	objectFileName := filepath.Join(objectSubDirPath, objectName)
 
 	// Skip if file already exists.
 	if _, err := os.Stat(objectFileName); os.IsExist(err) {
@@ -107,12 +109,16 @@ func ReadObject(hash string) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	objectSubDir := filepath.Join(objectDir, hash[:2])
-	if _, err := os.Stat(objectSubDir); os.IsNotExist(err) {
+	objectSubDir, objectName, err := splitHash(hash)
+	if err != nil {
+		return nil, err
+	}
+	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
+	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
 		return nil, errors.New(fmt.Sprintf("object %s does not exist", hash))
 	}
 
-	objectPath := filepath.Join(objectSubDir, hash[2:])
+	objectPath := filepath.Join(objectSubDirPath, objectName)
 	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
 		return nil, errors.New(fmt.Sprintf("object %s does not exist", hash))
 	}
@@ -140,6 +146,15 @@ func ReadObject(hash string) (Object, error) {
 	return parseObject(objectType, fullContents[pos+1:])
 }
 
+// Get directory and filesystem object name.
+func splitHash(hash string) (string, string, error) {
+	if len(hash) != 40 {
+		return "", "", errors.New("incorrect hash length")
+	}
+	return hash[:2], hash[2:], nil
+}
+
+// Parse file header to get object type and its size.
 func splitHeader(header string) (string, int, error) {
 	words := strings.Fields(header)
 	if len(words) != 2 {
