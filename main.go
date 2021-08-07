@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -11,95 +12,122 @@ const GITDIR string = ".gggit"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("You need to specify a gggit command.")
-		os.Exit(1)
+		usage("You need to specify a gggit command.")
 	}
-
 	cmd := os.Args[1]
+	args := os.Args[2:]
 	switch cmd {
 	case "add":
-		cmd_add(os.Args[2:])
+		CmdAdd(args)
 	case "cat-file":
-		cmd_cat(os.Args[2:])
+		CmdCat(args)
 	case "checkout":
-		cmd_checkout(os.Args[2:])
+		CmdCheckout(args)
 	case "commit":
-		cmd_commit(os.Args[2:])
+		CmdCommit(args)
 	case "hash-object":
-		cmd_hash(os.Args[2:])
+		CmdHash(args)
 	case "init":
-		cmd_init(os.Args[2:])
+		CmdInit(args)
 	case "log":
-		cmd_log(os.Args[2:])
+		CmdLog(args)
 	case "ls-tree":
-		cmd_ls(os.Args[2:])
-	case "merge":
-		cmd_merge(os.Args[2:])
-	case "rebase":
-		cmd_rebase(os.Args[2:])
-	case "rev-parse":
-		cmd_rev(os.Args[2:])
-	case "rm":
-		cmd_rm(os.Args[2:])
-	case "show-ref":
-		cmd_show(os.Args[2:])
-	case "tag":
-		cmd_tag(os.Args[2:])
+		CmdLs(args)
+	case "ls-objects":
+		CmdLsObjects(args)
 	default:
-		fmt.Printf("Command %v is not available. Did you mean sth else?\n", cmd)
-		os.Exit(1)
+		usage(fmt.Sprintf("Command %v is not available. Did you mean sth else?\n", cmd))
 	}
 }
 
-func cmd_add(args []string) {
+func CmdAdd(args []string) {
 	fmt.Println("add")
 }
-func cmd_cat(args []string) {
+
+func CmdCat(args []string) {
 	if len(args) != 1 {
-		fmt.Println("You should provide hash of object to cat.")
-		return
+		usage("You should provide hash of object to cat.")
 	}
-	o, err := ReadObject(args[0])
+	err := PrintObject(args[0])
 	if err != nil {
 		fmt.Println(err)
-		return
 	}
-	content, err := o.GetContent()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Print(string(content))
 }
-func cmd_checkout(args []string) {
+
+func CmdCheckout(args []string) {
 	fmt.Println("checkout")
 }
-func cmd_commit(args []string) {
+
+func CmdCommit(args []string) {
 	fmt.Println("commit")
 }
-func cmd_hash(args []string) {
-	if len(args) == 0 {
-		fmt.Println("You should provide name of a file to hash.")
-		return
+
+func CmdHash(args []string) {
+	switch len(args) {
+	case 0:
+		usage("You should provide name of an entity to hash.")
+	case 1:
+		hash, err := hashEntityByType(args[0], false)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(hash)
+	case 2:
+		if args[0] != "-w" {
+			usage(fmt.Sprintf("%s is not a valid option"))
+			return
+		}
+		hash, err := hashEntityByType(args[1], true)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(hash)
+	default:
+		usage("Too many arguments")
 	}
-	var hash string
-	var err error
-	// Do not write by default.
-	if len(args) == 1 {
-		hash, err = hashFile(args[0], false)
-	} else if args[0] == "-w" {
-		hash, err = hashFile(args[1], true)
-	} else {
-		fmt.Println(args[0], "not supported. Did you mean sth else?")
-		return
-	}
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(hash)
 }
-func cmd_init(args []string) {
+
+func hashEntityByType(path string, write bool) (string, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if fileInfo.IsDir() {
+		return hashTree(path, write)
+	}
+	return hashFile(path, write)
+}
+
+// Assumes caller verified that path points at a directory.
+func hashTree(path string, write bool) (string, error) {
+	t, err := CreateTreeObject(path)
+	if err != nil {
+		return "", err
+	}
+	if write {
+		if err := WriteTree(t); err != nil {
+			return "", err
+		}
+	}
+	return GetHash(t)
+}
+
+func hashFile(path string, write bool) (string, error) {
+	object, err := CreateBlobObject(path)
+	if err != nil {
+		return "", err
+	}
+	if write {
+		if err := Write(object); err != nil {
+			return "", err
+		}
+	}
+	return GetHash(object)
+}
+
+func CmdInit(args []string) {
 	path, err := initRepository("")
 	if err != nil {
 		fmt.Println(err)
@@ -107,29 +135,34 @@ func cmd_init(args []string) {
 	}
 	fmt.Printf("Created new repository at %v\n", path)
 }
-func cmd_log(args []string) {
-	fmt.Println("log")
-}
-func cmd_ls(args []string) {
+
+func CmdLs(args []string) {
 	fmt.Println("ls-tree")
 }
-func cmd_merge(args []string) {
-	fmt.Println("merge")
+
+func CmdLog(args []string) {
+	fmt.Println("log")
 }
-func cmd_rebase(args []string) {
-	fmt.Println("rebase")
-}
-func cmd_rev(args []string) {
-	fmt.Println("rev-parse")
-}
-func cmd_rm(args []string) {
-	fmt.Println("rm")
-}
-func cmd_show(args []string) {
-	fmt.Println("show-ref")
-}
-func cmd_tag(args []string) {
-	fmt.Println("tag")
+
+func CmdLsObjects(args []string) {
+	objectsDir, err := GetGitSubdir("objects")
+	if err != nil {
+		usage("could not find git objects dir")
+	}
+	dirEntries, err := os.ReadDir(objectsDir)
+	if err != nil {
+		usage("could not read git objects dir")
+	}
+	for _, e := range dirEntries {
+		subDirEntries, err := os.ReadDir(filepath.Join(objectsDir, e.Name()))
+		if err != nil {
+			usage("could not read one of object subdirs")
+		}
+		for _, se := range subDirEntries {
+			fmt.Println(e.Name() + se.Name())
+		}
+	}
+
 }
 
 func initRepository(path string) (string, error) {
@@ -157,19 +190,6 @@ func initRepository(path string) (string, error) {
 	descf, _ := os.Create(filepath.Join(gitdir, "description"))
 	descf.WriteString("Unnamed repository; edit this file 'description' to name the repository.\n")
 	return path, nil
-}
-
-func hashFile(path string, write bool) (string, error) {
-	object, err := CreateBlobObject(path)
-	if err != nil {
-		return "", err
-	}
-	if write {
-		if err := Write(object); err != nil {
-			return "", err
-		}
-	}
-	return GetHash(object)
 }
 
 // Find git directory and return its specific subdirectory.
@@ -203,4 +223,9 @@ func getGitDir(path string) (string, error) {
 		}
 	}
 	return gitPath, nil
+}
+
+func usage(msg string) {
+	io.WriteString(os.Stderr, msg+"\n")
+	os.Exit(1)
 }

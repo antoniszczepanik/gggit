@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/zlib"
 	"crypto/sha1"
 	"errors"
@@ -29,12 +30,27 @@ func (b Blob) GetType() string {
 	return "blob"
 }
 
-type Tree struct {
+type Tree []treeEntry
+
+type treeEntry struct {
+	Mode  string
+	Hash  string
+	Name  string
+	Entry Object
 }
 
+const treeEntryFmt = "%s %s %s\t%s"
+
 func (t Tree) GetContent() ([]byte, error) {
-	//TODO: Implement me.
-	return make([]byte, 1), nil
+	var content []byte
+	for _, e := range t {
+		if e.Mode == "" || e.Hash == "" || e.Name == "" || e.Entry == nil {
+			return nil, errors.New("cannot get content of tree with missing attributes")
+		}
+		entry_content := fmt.Sprintf(treeEntryFmt+"\n", e.Mode, e.Entry.GetType(), e.Hash, e.Name)
+		content = append(content, []byte(entry_content)...)
+	}
+	return content, nil
 }
 
 func (t Tree) GetType() string {
@@ -55,7 +71,7 @@ func (t Commit) GetType() string {
 
 // Write object contents to internal git storage.
 func Write(o Object) error {
-	if err := checkIfEmpty(o); err != nil {
+	if err := isEmpty(o); err != nil {
 		return err
 	}
 	objectDir, err := GetGitSubdir("objects")
@@ -103,47 +119,105 @@ func Write(o Object) error {
 	return nil
 }
 
-// Read internal git object by hash value.
+// Read object object :)
 func ReadObject(hash string) (Object, error) {
-	objectDir, err := GetGitSubdir("objects")
+	content, objectType, err := getObjectContent(hash)
 	if err != nil {
 		return nil, err
+	}
+	return parseObject(objectType, content)
+}
+
+// Print object contents by hash name.
+func PrintObject(hash string) error {
+	content, _, err := getObjectContent(hash)
+	if err != nil {
+		return err
+	}
+	fmt.Print(string(content))
+	return nil
+}
+
+func getObjectContent(hash string) ([]byte, string, error) {
+	objectDir, err := GetGitSubdir("objects")
+	if err != nil {
+		return nil, "", err
 	}
 	objectSubDir, objectName, err := splitHash(hash)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
 	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
-		return nil, errors.New(fmt.Sprintf("object %s does not exist", hash))
+		return nil, "", errors.New(fmt.Sprintf("object %s does not exist", hash))
 	}
 
 	objectPath := filepath.Join(objectSubDirPath, objectName)
 	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
-		return nil, errors.New(fmt.Sprintf("object %s does not exist", hash))
+		return nil, "", errors.New(fmt.Sprintf("object %s does not exist", hash))
 	}
 	f, err := os.Open(objectPath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	r, err := zlib.NewReader(f)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer r.Close()
 	fullContents, err := io.ReadAll(r)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	pos := getNullBytePos(fullContents)
 	if len(fullContents) < pos {
-		return nil, errors.New("invalid object format")
+		return nil, "", errors.New("invalid object format")
 	}
 	objectType, _, err := splitHeader(string(fullContents[:pos]))
 	if err != nil {
+		return nil, "", err
+	}
+	return fullContents[pos+1:], objectType, nil
+}
+
+// Get hash of an object.
+func GetHash(o Object) (string, error) {
+	if err := isEmpty(o); err != nil {
+		return "", err
+	}
+	fullContent, err := constructFullContent(o)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", sha1.Sum(fullContent)), nil
+}
+
+// Construct header of an object.
+func getHeader(o Object) ([]byte, error) {
+	if err := isEmpty(o); err != nil {
 		return nil, err
 	}
-	return parseObject(objectType, fullContents[pos+1:])
+	content, err := o.GetContent()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(fmt.Sprintf("%s %d\000", o.GetType(), len(content))), nil
+}
+
+// Get full object contents, header and actual content.
+func constructFullContent(o Object) ([]byte, error) {
+	if err := isEmpty(o); err != nil {
+		return nil, err
+	}
+	header, err := getHeader(o)
+	if err != nil {
+		return nil, err
+	}
+	content, err := o.GetContent()
+	if err != nil {
+		return nil, err
+	}
+	return append(header, content...), nil
 }
 
 // Get directory and filesystem object name.
@@ -167,6 +241,7 @@ func splitHeader(header string) (string, int, error) {
 	return words[0], size, nil
 }
 
+// Return specific object for arbitrary type and contents.
 func parseObject(objectType string, contents []byte) (Object, error) {
 	switch objectType {
 	case "blob":
@@ -175,8 +250,7 @@ func parseObject(objectType string, contents []byte) (Object, error) {
 		// TODO parseCommit(contents)
 		return nil, errors.New("cannot parse commit objects")
 	case "tree":
-		// TODO parseTree(contents)
-		return nil, errors.New("cannot parse tree objects")
+		return parseTree(contents)
 	}
 	return nil, errors.New(fmt.Sprintf("cannot parse object %s", objectType))
 }
@@ -187,50 +261,67 @@ func parseBlob(contents []byte) (Blob, error) {
 	}, nil
 }
 
-// Get hash of an object.
-func GetHash(o Object) (string, error) {
-	if err := checkIfEmpty(o); err != nil {
-		return "", err
+func parseTree(contents []byte) (Tree, error) {
+	var (
+		t     Tree
+		emode string
+		etype string
+		ehash string
+		ename string
+	)
+	rawEntries := splitTreeEntries(contents)
+	for _, rawEntry := range rawEntries {
+		r := bytes.NewReader(rawEntry)
+		_, err := fmt.Fscanf(r, treeEntryFmt, &emode, &etype, &ehash, &ename)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return Tree{}, err
+		}
+		obj, err := ReadObject(ehash)
+		if err != nil {
+			return Tree{}, err
+		}
+		t = append(t, treeEntry{Mode: emode, Hash: ehash, Name: ename, Entry: obj})
 	}
-	fullContent, err := constructFullContent(o)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", sha1.Sum(fullContent)), nil
+	return t, nil
 }
 
-// Construct header of an object.
-func getHeader(o Object) ([]byte, error) {
-	if err := checkIfEmpty(o); err != nil {
-		return nil, err
+func splitTreeEntries(contents []byte) [][]byte {
+	var (
+		splitted [][]byte
+		split    []byte
+	)
+	for _, c := range contents {
+		if c != '\n' {
+			split = append(split, c)
+		} else {
+			splitted = append(splitted, split)
+			split = nil
+		}
 	}
-	content, err := o.GetContent()
-	if err != nil {
-		return nil, err
-	}
-	return []byte(fmt.Sprintf("%s %d\000", o.GetType(), len(content))), nil
+	return splitted
 }
 
-// Get full object contents, header and actual content.
-func constructFullContent(o Object) ([]byte, error) {
-	if err := checkIfEmpty(o); err != nil {
-		return nil, err
+// Write tree object, recursively writing all its entries.
+func WriteTree(t Tree) error {
+	if err := Write(t); err != nil {
+		return err
 	}
-	header, err := getHeader(o)
-	if err != nil {
-		return nil, err
-	}
-	content, err := o.GetContent()
-	if err != nil {
-		return nil, err
-	}
-	return append(header, content...), nil
-}
-
-// Validate if object has any contents.
-func checkIfEmpty(o Object) error {
-	if content, err := o.GetContent(); err != nil || content == nil || o.GetType() == "" {
-		return errors.New("object is not complete")
+	for _, tEntry := range t {
+		if exists(tEntry.Hash) == nil {
+			continue
+		}
+		if tEntry.Entry.GetType() == "blob" {
+			if err := Write(tEntry.Entry); err != nil {
+				return err
+			}
+		} else if tEntry.Entry.GetType() == "tree" {
+			if err := WriteTree(tEntry.Entry.(Tree)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -246,19 +337,123 @@ func CreateBlobObject(filepath string) (Blob, error) {
 	}, nil
 }
 
-func CreateTreeObject(dirpath string) (*Tree, error) {
+var EmptyTreeError = errors.New("cannot create an empty tree")
+
+// Create tree object for a given directory.
+func CreateTreeObject(dirpath string) (Tree, error) {
+	if fi, err := os.Stat(dirpath); err != nil || !fi.IsDir() {
+		return Tree{}, errors.New("tried to create a tree not from a directory")
+	}
+	dirEntries, err := os.ReadDir(dirpath)
+	if err != nil {
+		return Tree{}, err
+	}
+	// Directory without any entries is ignored.
+	if len(dirEntries) == 0 {
+		return Tree{}, EmptyTreeError
+	}
+	var t Tree
+	for _, dirEntry := range dirEntries {
+		tEntry := treeEntry{}
+		if dirEntry.IsDir() {
+			subTree, err := CreateTreeObject(filepath.Join(dirpath, dirEntry.Name()))
+			// Once more: we skip empty trees.
+			if err == EmptyTreeError {
+				continue
+			} else if err != nil {
+				return Tree{}, err
+			}
+			tEntry.Mode = "040000"
+			hash, err := GetHash(subTree)
+			if err != nil {
+				return Tree{}, err
+			}
+			tEntry.Hash = hash
+			tEntry.Name = dirEntry.Name()
+			tEntry.Entry = subTree
+			t = append(t, tEntry)
+		} else {
+			blob, err := CreateBlobObject(filepath.Join(dirpath, dirEntry.Name()))
+			if err != nil {
+				return Tree{}, err
+			}
+			// 100755 - executable
+			// 120000 - symlink
+			tEntry.Mode = "100644" // normal file
+
+			hash, err := GetHash(blob)
+			if err != nil {
+				return Tree{}, err
+			}
+			tEntry.Hash = hash
+			tEntry.Name = dirEntry.Name()
+			tEntry.Entry = blob
+			t = append(t, tEntry)
+		}
+	}
+	return t, nil
+}
+
+func CreateCommitObject(treehash string) (*Commit, error) {
 	// TODO
-	fmt.Println(dirpath)
+	fmt.Println(treehash + "this should not be executed")
 	return nil, errors.New("Not implemented")
 }
 
-func CreateCommitOboject(treehash string) (*Commit, error) {
-	// TODO
-	fmt.Println(treehash)
-	return nil, errors.New("Not implemented")
+func exists(hash string) error {
+	objectDir, err := GetGitSubdir("objects")
+	if err != nil {
+		return err
+	}
+	objectSubDir, objectName, err := splitHash(hash)
+	if err != nil {
+		return err
+	}
+	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
+	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
+		return err
+	}
+	objectFileName := filepath.Join(objectSubDirPath, objectName)
+	if _, err := os.Stat(objectFileName); os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
-// Get position of the null byte, to seperate header from gg
+type EmptyObjectError struct {
+	Msg     string
+	Content []byte
+	Type    string
+}
+
+func (o EmptyObjectError) Error() string {
+	return fmt.Sprintf("%s\n%s\n%s\n", o.Msg, o.Type, string(o.Content))
+}
+
+// Check if object was properly initialized.
+func isEmpty(o Object) error {
+	content, err := o.GetContent()
+	if err != nil {
+		return err
+	}
+	if content == nil {
+		return &EmptyObjectError{
+			Msg:     "empty object content",
+			Type:    o.GetType(),
+			Content: content,
+		}
+	}
+	if t := o.GetType(); t == "" {
+		return &EmptyObjectError{
+			Msg:     "empty object type",
+			Type:    "",
+			Content: content,
+		}
+	}
+	return nil
+}
+
+// Get position of the null byte, to seperate header from content.
 func getNullBytePos(n []byte) int {
 	for i := 0; i < len(n); i++ {
 		if n[i] == 0 {
