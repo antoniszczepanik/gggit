@@ -77,7 +77,7 @@ func getCurrentRef() (string, error) {
 	if isDetached {
 		return "", errors.New("head is detached, could not get current ref")
 	}
-	refPath, err :=  parseRef(hp.content)
+	refPath, err := parseRef(hp.content)
 	if err != nil {
 		return "", err
 	}

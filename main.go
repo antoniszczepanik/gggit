@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const GITDIR string = ".gggit"
@@ -35,6 +36,8 @@ func main() {
 		CmdLs(args)
 	case "ls-objects":
 		CmdLsObjects(args)
+	case "status":
+		CmdStatus(args)
 	default:
 		usage(fmt.Sprintf("Command %v is not available. Did you mean sth else?\n", cmd))
 	}
@@ -206,6 +209,26 @@ func CmdLsObjects(args []string) {
 
 }
 
+func CmdStatus(args []string) {
+	currentCommitHash, err := getHeadCommitHash()
+	if err != nil {
+		usage("could not get current commit")
+	}
+	refPath, err := getCurrentRef()
+	if err != nil {
+		usage("detached HEAD mode on " + currentCommitHash)
+	}
+	usage("On branch " + getBranchName(refPath))
+}
+
+func getBranchName(refPath string) string {
+	words := strings.Split(refPath, string(os.PathSeparator))
+	if len(words) < 1 {
+		return ""
+	}
+	return words[len(words)-1]
+}
+
 func initRepository(path string) (string, error) {
 	var err error
 	if path == "" {
@@ -325,7 +348,6 @@ func getGitFilePath(filename string) (string, error) {
 	}
 	return filepath.Join(gitDir, filename), nil
 }
-
 
 func usage(msg string) {
 	io.WriteString(os.Stderr, msg+"\n")
