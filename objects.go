@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Object interface {
@@ -58,14 +59,33 @@ func (t Tree) GetType() string {
 }
 
 type Commit struct {
+	TreeHash   string
+	ParentHash string
+	Author     AuthorType
+	// TODO: Should be represented as in RFC 2822. On drive it will be stored
+	// as unixts timezoneoffset
+	Time time.Time
+	Msg  string
 }
 
-func (t Commit) GetContent() ([]byte, error) {
-	//TODO: Implement me.
-	return make([]byte, 1), nil
+type AuthorType struct {
+	Name  string
+	Email string
 }
 
-func (t Commit) GetType() string {
+func (c Commit) GetContent() ([]byte, error) {
+	content := fmt.Sprintf("tree %s\n", c.TreeHash)
+	if c.ParentHash != "" {
+		content += fmt.Sprintf("parent %s\n", c.ParentHash)
+	}
+	_, offset := c.Time.Zone()
+	time := fmt.Sprintf("%d %d", c.Time.Unix(), offset)
+	content += fmt.Sprintf("author %s <%s> %s\n\n", c.Author.Name, c.Author.Email, time)
+	content += fmt.Sprintf("%s\n", c.Msg)
+	return []byte(content), nil
+}
+
+func (c Commit) GetType() string {
 	return "commit"
 }
 
@@ -269,7 +289,7 @@ func parseTree(contents []byte) (Tree, error) {
 		ehash string
 		ename string
 	)
-	rawEntries := splitTreeEntries(contents)
+	rawEntries := splitEntries(contents)
 	for _, rawEntry := range rawEntries {
 		r := bytes.NewReader(rawEntry)
 		_, err := fmt.Fscanf(r, treeEntryFmt, &emode, &etype, &ehash, &ename)
@@ -288,7 +308,7 @@ func parseTree(contents []byte) (Tree, error) {
 	return t, nil
 }
 
-func splitTreeEntries(contents []byte) [][]byte {
+func splitEntries(contents []byte) [][]byte {
 	var (
 		splitted [][]byte
 		split    []byte
@@ -302,6 +322,10 @@ func splitTreeEntries(contents []byte) [][]byte {
 		}
 	}
 	return splitted
+}
+
+func parseCommit(contents []byte) (Commit, error) {
+	return Commit{}, nil
 }
 
 // Write tree object, recursively writing all its entries.
@@ -342,7 +366,7 @@ var EmptyTreeError = errors.New("cannot create an empty tree")
 // Create tree object for a given directory.
 func CreateTreeObject(dirpath string) (Tree, error) {
 	if fi, err := os.Stat(dirpath); err != nil || !fi.IsDir() {
-		return Tree{}, errors.New("tried to create a tree not from a directory")
+		return Tree{}, errors.New("cannot create tree from a file")
 	}
 	dirEntries, err := os.ReadDir(dirpath)
 	if err != nil {
@@ -355,49 +379,70 @@ func CreateTreeObject(dirpath string) (Tree, error) {
 	var t Tree
 	for _, dirEntry := range dirEntries {
 		tEntry := treeEntry{}
+		dirEntryPath := filepath.Join(dirpath, dirEntry.Name())
+		var (
+			object Object
+			mode   string
+			err    error
+		)
 		if dirEntry.IsDir() {
-			subTree, err := CreateTreeObject(filepath.Join(dirpath, dirEntry.Name()))
+			if dirEntry.Name() == GITDIR {
+				continue
+			}
+			object, err = CreateTreeObject(dirEntryPath)
 			// Once more: we skip empty trees.
 			if err == EmptyTreeError {
 				continue
 			} else if err != nil {
 				return Tree{}, err
 			}
-			tEntry.Mode = "040000"
-			hash, err := GetHash(subTree)
-			if err != nil {
-				return Tree{}, err
-			}
-			tEntry.Hash = hash
-			tEntry.Name = dirEntry.Name()
-			tEntry.Entry = subTree
-			t = append(t, tEntry)
+			mode = "040000" // directory aka tree
 		} else {
-			blob, err := CreateBlobObject(filepath.Join(dirpath, dirEntry.Name()))
+			object, err = CreateBlobObject(dirEntryPath)
 			if err != nil {
 				return Tree{}, err
 			}
+			// TODO: Handle all permission bits properly.
 			// 100755 - executable
 			// 120000 - symlink
-			tEntry.Mode = "100644" // normal file
-
-			hash, err := GetHash(blob)
-			if err != nil {
-				return Tree{}, err
-			}
-			tEntry.Hash = hash
-			tEntry.Name = dirEntry.Name()
-			tEntry.Entry = blob
-			t = append(t, tEntry)
+			mode = "100644" // normal file
 		}
+		hash, err := GetHash(object)
+		if err != nil {
+			return Tree{}, err
+		}
+		tEntry.Mode = mode
+		tEntry.Hash = hash
+		tEntry.Name = dirEntry.Name()
+		tEntry.Entry = object
+		t = append(t, tEntry)
 	}
 	return t, nil
 }
 
-func CreateCommitObject(treehash string) (*Commit, error) {
-	// TODO
-	fmt.Println(treehash + "this should not be executed")
-	return nil, errors.New("Not implemented")
+func CreateCommitObject(treehash string, message string) (Commit, error) {
+	author, err := getAuthorFromConfig()
+	if err != nil {
+		return Commit{}, err
+	}
+	headCommitHash, err := getHeadCommitHash()
+	if err != nil {
+		return Commit{}, err
+	}
+	return Commit{
+		TreeHash:   treehash,
+		ParentHash: headCommitHash,
+		Author:     author,
+		Time:       time.Now(),
+		Msg:        message,
+	}, nil
+}
+
+func getAuthorFromConfig() (AuthorType, error) {
+	return AuthorType{
+		Name:  "Antoni Szczepanik",
+		Email: "szczepanik.antoni@gmail.com",
+	}, nil
 }
 
 func exists(hash string) error {
