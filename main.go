@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-const GITDIR string = ".gggit"
+	"gggit/objects"
+	"gggit/refs"
+	"gggit/utils"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -51,7 +53,7 @@ func CmdCat(args []string) {
 	if len(args) != 1 {
 		usage("You should provide hash of object to cat.")
 	}
-	err := PrintObject(args[0])
+	err := objects.PrintObject(args[0])
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -63,7 +65,7 @@ func CmdCheckout(args []string) {
 
 func CmdCommit(args []string) {
 	// TODO: Split this to multiple methods. Should cmd helpers be in main?
-	repoRoot, err := getRepoRoot("")
+	repoRoot, err := utils.GetRepoRoot("")
 	if err != nil {
 		usage("not a git repository (or any of the parent directories)")
 	}
@@ -74,34 +76,34 @@ func CmdCommit(args []string) {
 	}
 	// TODO: Add possibility to specify own message.
 	msg := "Hello from gggit."
-	c, err := CreateCommitObject(hash, msg)
+	c, err := objects.CreateCommitObject(hash, msg)
 	if err != nil {
 		usage("failed to create commit object")
 	}
-	err = Write(c)
+	err = objects.Write(c)
 	if err != nil {
 		usage("failed to write a commit object")
 	}
-	commitHash, err := GetHash(c)
+	commitHash, err := objects.GetHash(c)
 	if err != nil {
 		usage("could not get hash for new commit")
 	}
-	refPath, err := getCurrentRef()
+	refPath, err := refs.GetCurrentRef()
 	if err != nil {
 		usage("cannot get current ref. Are you in detached HEAD mode?")
 	}
-	err = updateRef(refPath, commitHash)
+	err = refs.UpdateRef(refPath, commitHash)
 	if err != nil {
 		fmt.Println(err)
 		usage("cannot update current ref")
 	}
-	err = checkoutRef(refPath)
+	err = refs.CheckoutRef(refPath)
 	if err != nil {
 		fmt.Println(err)
 		usage("could not checkout the new ref")
 	}
 	fmt.Println("commit " + commitHash)
-	err = PrintObject(commitHash)
+	err = objects.PrintObject(commitHash)
 	if err != nil {
 		usage("could not print commit content")
 	}
@@ -147,31 +149,31 @@ func hashEntityByType(path string, write bool) (string, error) {
 
 // Assumes caller verified that path points at a directory.
 func hashTree(path string, write bool) (string, error) {
-	t, err := CreateTreeObject(path)
-	if err == EmptyTreeError {
+	t, err := objects.CreateTreeObject(path)
+	if errors.Is(err, objects.ErrEmptyTree) {
 		return "", errors.New("directory is empty")
 	} else if err != nil {
 		return "", err
 	}
 	if write {
-		if err := WriteTree(t); err != nil {
+		if err := objects.WriteTree(t); err != nil {
 			return "", err
 		}
 	}
-	return GetHash(t)
+	return objects.GetHash(t)
 }
 
 func hashFile(path string, write bool) (string, error) {
-	object, err := CreateBlobObject(path)
+	object, err := objects.CreateBlobObject(path)
 	if err != nil {
 		return "", err
 	}
 	if write {
-		if err := Write(object); err != nil {
+		if err := objects.Write(object); err != nil {
 			return "", err
 		}
 	}
-	return GetHash(object)
+	return objects.GetHash(object)
 }
 
 func CmdInit(args []string) {
@@ -192,7 +194,7 @@ func CmdLog(args []string) {
 }
 
 func CmdLsObjects(args []string) {
-	objectsDir, err := GetGitSubdir("objects")
+	objectsDir, err := utils.GetGitSubdir("objects")
 	if err != nil {
 		usage("could not find git objects dir")
 	}
@@ -209,15 +211,14 @@ func CmdLsObjects(args []string) {
 			fmt.Println(e.Name() + se.Name())
 		}
 	}
-
 }
 
 func CmdStatus(args []string) {
-	currentCommitHash, err := getHeadCommitHash()
+	currentCommitHash, err := refs.GetHeadCommitHash()
 	if err != nil {
 		usage("could not get current commit")
 	}
-	refPath, err := getCurrentRef()
+	refPath, err := refs.GetCurrentRef()
 	if err != nil {
 		usage("detached HEAD mode on " + currentCommitHash)
 	}
@@ -243,9 +244,9 @@ func initRepository(path string) (string, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return "", errors.New("specified directory does not exist")
 	}
-	gitdir := filepath.Join(path, GITDIR)
+	gitdir := filepath.Join(path, utils.GITDIR)
 	if _, err := os.Stat(gitdir); !os.IsNotExist(err) {
-		return "", fmt.Errorf("git directory already exists at %v\n", path)
+		return "", fmt.Errorf("git directory already exists at %v", path)
 	}
 	err = os.Mkdir(gitdir, 0755)
 	if err != nil {
@@ -284,72 +285,6 @@ func initRepository(path string) (string, error) {
 		return "", err
 	}
 	return path, nil
-}
-
-// Find git directory and return its specific subdirectory.
-func GetGitSubdir(subdirName string) (string, error) {
-	gitDir, err := getGitDir("")
-	if err != nil {
-		return "", err
-	}
-	subDir := filepath.Join(gitDir, subdirName)
-	if _, err := os.Stat(subDir); os.IsNotExist(err) {
-		return "", fmt.Errorf("directory %s does not exist", subDir)
-	}
-	return subDir, nil
-}
-
-// Get a path to .git directory.
-func getGitDir(path string) (string, error) {
-	repoDir, err := getRepoRoot(path)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(repoDir, GITDIR), nil
-}
-
-// Get a path to repository root.
-func getRepoRoot(path string) (string, error) {
-	var err error
-	if path == "" {
-		path, err = os.Getwd()
-		if err != nil {
-			return "", err
-		}
-	}
-	gitPath := filepath.Join(path, GITDIR)
-	if _, err = os.ReadDir(gitPath); os.IsNotExist(err) {
-		if path == "/" {
-			return "", errors.New("did not find git directory")
-		} else {
-			return getRepoRoot(filepath.Dir(path))
-		}
-	}
-	return path, nil
-}
-
-// Returns a pointer to internal git file. Caller is responsilbe for
-// closing a file handle.
-func getGitFile(filename string) (*os.File, error) {
-	fullPath, err := getGitFilePath(filename)
-	if err != nil {
-		return nil, err
-	}
-	f, err := os.Open(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	return f, nil
-}
-
-// Get full path to a git internal file.
-// Accepts filename relative to .git directory.
-func getGitFilePath(filename string) (string, error) {
-	gitDir, err := getGitDir("")
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(gitDir, filename), nil
 }
 
 func usage(msg string) {

@@ -1,15 +1,16 @@
-package main
+package refs
 
 import (
 	"errors"
 	"fmt"
+	"gggit/utils"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-var MissingRefError = errors.New("head points to a missing ref")
+var ErrMissingRef = errors.New("head points to a missing ref")
 
 type HeadPointer struct {
 	content string
@@ -53,7 +54,7 @@ func (hp HeadPointer) detached() (bool, error) {
 }
 
 func readHeadPointer() (HeadPointer, error) {
-	f, err := getGitFile("HEAD")
+	f, err := utils.GetGitFile("HEAD")
 	if err != nil {
 		return HeadPointer{}, err
 	}
@@ -65,7 +66,7 @@ func readHeadPointer() (HeadPointer, error) {
 	return HeadPointer{content: string(content)}, nil
 }
 
-func getCurrentRef() (string, error) {
+func GetCurrentRef() (string, error) {
 	hp, err := readHeadPointer()
 	if err != nil {
 		return "", err
@@ -84,7 +85,7 @@ func getCurrentRef() (string, error) {
 	return refPath, nil
 }
 
-func getHeadCommitHash() (string, error) {
+func GetHeadCommitHash() (string, error) {
 	head, err := readHeadPointer()
 	if err != nil {
 		return "", err
@@ -94,7 +95,7 @@ func getHeadCommitHash() (string, error) {
 
 // Returns empty string if ref does not exist yet.
 func readHashFromRef(refPath string) (string, error) {
-	f, err := getGitFile(refPath)
+	f, err := utils.GetGitFile(refPath)
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
@@ -110,8 +111,8 @@ func readHashFromRef(refPath string) (string, error) {
 
 // Create new ref and return it's pointer. Caller is responsible for closing
 // the file.
-func createNewRef(name string) (*os.File, error) {
-	headsDir, err := GetGitSubdir("refs/heads")
+func CreateNewRef(name string) (*os.File, error) {
+	headsDir, err := utils.GetGitSubdir("refs/heads")
 	if err != nil {
 		return nil, err
 	}
@@ -125,14 +126,14 @@ func createNewRef(name string) (*os.File, error) {
 
 // Update ref contents to point at a given hash.
 // Creates ref file if such does not exists.
-func updateRef(refPath string, commitHash string) error {
-	filePath, err := getGitFilePath(refPath)
+func UpdateRef(refPath string, commitHash string) error {
+	filePath, err := utils.GetGitFilePath(refPath)
 	if err != nil {
 		return err
 	}
 	f, err := os.Create(filePath)
 	if err != nil {
-		return nil
+		return err
 	}
 	defer f.Close()
 	_, err = f.Write([]byte(fmt.Sprintf("%s\n", commitHash)))
@@ -143,14 +144,14 @@ func updateRef(refPath string, commitHash string) error {
 }
 
 // Point HEAD at ref.
-func checkoutRef(refPath string) error {
-	headPath, err := getGitFilePath("HEAD")
+func CheckoutRef(refPath string) error {
+	headPath, err := utils.GetGitFilePath("HEAD")
 	if err != nil {
 		return err
 	}
 	f, err := os.Create(headPath)
 	if err != nil {
-		return nil
+		return err
 	}
 	defer f.Close()
 	_, err = f.Write([]byte(fmt.Sprintf("ref: %s\n", refPath)))
@@ -160,7 +161,7 @@ func checkoutRef(refPath string) error {
 	return nil
 }
 
-func getRefPath(branchName string) string {
+func GetRefPath(branchName string) string {
 	return "refs/heads/" + branchName
 }
 
