@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"gggit/refs"
+	"github.com/antoniszczepanik/gggit/refs"
 )
 
 const commit string = "commit"

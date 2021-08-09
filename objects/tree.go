@@ -8,7 +8,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"gggit/utils"
+	"github.com/antoniszczepanik/gggit/utils"
 )
 
 const tree string = "tree"

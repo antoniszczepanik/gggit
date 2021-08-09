@@ -3,11 +3,12 @@ package refs
 import (
 	"errors"
 	"fmt"
-	"gggit/utils"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/antoniszczepanik/gggit/utils"
 )
 
 var ErrMissingRef = errors.New("head points to a missing ref")

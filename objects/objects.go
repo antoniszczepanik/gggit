@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gggit/utils"
+	"github.com/antoniszczepanik/gggit/utils"
 )
 
 type Object interface {

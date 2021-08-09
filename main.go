@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gggit/objects"
-	"gggit/refs"
-	"gggit/utils"
+	"github.com/antoniszczepanik/gggit/objects"
+	"github.com/antoniszczepanik/gggit/refs"
+	"github.com/antoniszczepanik/gggit/utils"
 )
 
 func main() {
