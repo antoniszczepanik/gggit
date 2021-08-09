@@ -101,7 +101,10 @@ func CmdCommit(args []string) {
 		usage("could not checkout the new ref")
 	}
 	fmt.Println("commit " + commitHash)
-	PrintObject(commitHash)
+	err = PrintObject(commitHash)
+	if err != nil {
+		usage("could not print commit content")
+	}
 }
 
 func CmdHash(args []string) {
@@ -117,7 +120,7 @@ func CmdHash(args []string) {
 		fmt.Println(hash)
 	case 2:
 		if args[0] != "-w" {
-			usage(fmt.Sprintf("%s is not a valid option"))
+			usage(fmt.Sprintf("%s is not a valid option", args[0]))
 			return
 		}
 		hash, err := hashEntityByType(args[1], true)
@@ -242,7 +245,7 @@ func initRepository(path string) (string, error) {
 	}
 	gitdir := filepath.Join(path, GITDIR)
 	if _, err := os.Stat(gitdir); !os.IsNotExist(err) {
-		return "", errors.New(fmt.Sprintf("git directory already exists at %v\n", path))
+		return "", fmt.Errorf("git directory already exists at %v\n", path)
 	}
 	err = os.Mkdir(gitdir, 0755)
 	if err != nil {
@@ -291,7 +294,7 @@ func GetGitSubdir(subdirName string) (string, error) {
 	}
 	subDir := filepath.Join(gitDir, subdirName)
 	if _, err := os.Stat(subDir); os.IsNotExist(err) {
-		return "", errors.New(fmt.Sprintf("directory %s does not exist", subDir))
+		return "", fmt.Errorf("directory %s does not exist", subDir)
 	}
 	return subDir, nil
 }
@@ -350,6 +353,9 @@ func getGitFilePath(filename string) (string, error) {
 }
 
 func usage(msg string) {
-	io.WriteString(os.Stderr, msg+"\n")
+	_, err := io.WriteString(os.Stderr, msg+"\n")
+	if err != nil {
+		panic("whut")
+	}
 	os.Exit(1)
 }

@@ -54,10 +54,10 @@ func (hp HeadPointer) detached() (bool, error) {
 
 func readHeadPointer() (HeadPointer, error) {
 	f, err := getGitFile("HEAD")
-	defer f.Close()
 	if err != nil {
 		return HeadPointer{}, err
 	}
+	defer f.Close()
 	content, err := io.ReadAll(f)
 	if err != nil {
 		return HeadPointer{}, err

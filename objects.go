@@ -169,12 +169,12 @@ func getObjectContent(hash string) ([]byte, string, error) {
 	}
 	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
 	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
-		return nil, "", errors.New(fmt.Sprintf("object %s does not exist", hash))
+		return nil, "", fmt.Errorf("object %s does not exist", hash)
 	}
 
 	objectPath := filepath.Join(objectSubDirPath, objectName)
 	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
-		return nil, "", errors.New(fmt.Sprintf("object %s does not exist", hash))
+		return nil, "", fmt.Errorf("object %s does not exist", hash)
 	}
 	f, err := os.Open(objectPath)
 	if err != nil {
@@ -272,7 +272,7 @@ func parseObject(objectType string, contents []byte) (Object, error) {
 	case "tree":
 		return parseTree(contents)
 	}
-	return nil, errors.New(fmt.Sprintf("cannot parse object %s", objectType))
+	return nil, fmt.Errorf("cannot parse object %s", objectType)
 }
 
 func parseBlob(contents []byte) (Blob, error) {
