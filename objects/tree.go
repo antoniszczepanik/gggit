@@ -48,7 +48,7 @@ func parseTree(contents []byte) (Tree, error) {
 		ehash string
 		ename string
 	)
-	rawEntries := splitEntries(contents, '\n')
+	rawEntries := utils.SplitEntries(contents, '\n')
 	for _, rawEntry := range rawEntries {
 		r := bytes.NewReader(rawEntry)
 		_, err := fmt.Fscanf(r, treeEntryFmt, &emode, &etype, &ehash, &ename)
@@ -73,7 +73,7 @@ func WriteTree(t Tree) error {
 		return err
 	}
 	for _, tEntry := range t {
-		if exists(tEntry.Hash) == nil {
+		if Exists(tEntry.Hash) == nil {
 			continue
 		}
 		if tEntry.Entry.GetType() == blob {

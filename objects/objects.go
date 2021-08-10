@@ -21,7 +21,7 @@ type Object interface {
 
 // Write object contents to internal git storage.
 func Write(o Object) error {
-	if err := isEmpty(o); err != nil {
+	if err := IsEmpty(o); err != nil {
 		return err
 	}
 	objectDir, err := utils.GetGitSubdir("objects")
@@ -32,7 +32,7 @@ func Write(o Object) error {
 	if err != nil {
 		return err
 	}
-	objectSubDir, objectName, err := splitHash(hash)
+	objectSubDir, objectName, err := utils.SplitHash(hash)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func getObjectContent(hash string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	objectSubDir, objectName, err := splitHash(hash)
+	objectSubDir, objectName, err := utils.SplitHash(hash)
 	if err != nil {
 		return nil, "", err
 	}
@@ -119,7 +119,7 @@ func getObjectContent(hash string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	pos := getNullBytePos(fullContents)
+	pos := utils.GetNullBytePos(fullContents)
 	if len(fullContents) < pos {
 		return nil, "", errors.New("invalid object format")
 	}
@@ -132,7 +132,7 @@ func getObjectContent(hash string) ([]byte, string, error) {
 
 // Get hash of an object.
 func GetHash(o Object) (string, error) {
-	if err := isEmpty(o); err != nil {
+	if err := IsEmpty(o); err != nil {
 		return "", err
 	}
 	fullContent, err := constructFullContent(o)
@@ -144,7 +144,7 @@ func GetHash(o Object) (string, error) {
 
 // Construct header of an object.
 func getHeader(o Object) ([]byte, error) {
-	if err := isEmpty(o); err != nil {
+	if err := IsEmpty(o); err != nil {
 		return nil, err
 	}
 	content, err := o.GetContent()
@@ -156,7 +156,7 @@ func getHeader(o Object) ([]byte, error) {
 
 // Get full object contents, header and actual content.
 func constructFullContent(o Object) ([]byte, error) {
-	if err := isEmpty(o); err != nil {
+	if err := IsEmpty(o); err != nil {
 		return nil, err
 	}
 	header, err := getHeader(o)
@@ -168,15 +168,6 @@ func constructFullContent(o Object) ([]byte, error) {
 		return nil, err
 	}
 	return append(header, content...), nil
-}
-
-// Split hash to get directory and filename, so that
-// serialized objects are scattered among directories.
-func splitHash(hash string) (string, string, error) {
-	if len(hash) != 40 {
-		return "", "", errors.New("incorrect hash length")
-	}
-	return hash[:2], hash[2:], nil
 }
 
 // Parse file header to get object type and its size.
@@ -205,45 +196,6 @@ func parseObject(objectType string, contents []byte) (Object, error) {
 	return nil, fmt.Errorf("cannot parse object %s", objectType)
 }
 
-// Miscelanneus.
-
-// Split contents by a sep.
-func splitEntries(contents []byte, sep byte) [][]byte {
-	var (
-		splitted [][]byte
-		split    []byte
-	)
-	for _, c := range contents {
-		if c != sep {
-			split = append(split, c)
-		} else {
-			splitted = append(splitted, split)
-			split = nil
-		}
-	}
-	return splitted
-}
-
-func exists(hash string) error {
-	objectDir, err := utils.GetGitSubdir("objects")
-	if err != nil {
-		return err
-	}
-	objectSubDir, objectName, err := splitHash(hash)
-	if err != nil {
-		return err
-	}
-	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
-	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
-		return err
-	}
-	objectFileName := filepath.Join(objectSubDirPath, objectName)
-	if _, err := os.Stat(objectFileName); os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
 type EmptyObjectError struct {
 	Msg     string
 	Content []byte
@@ -255,7 +207,7 @@ func (o EmptyObjectError) Error() string {
 }
 
 // Check if object was properly initialized.
-func isEmpty(o Object) error {
+func IsEmpty(o Object) error {
 	content, err := o.GetContent()
 	if err != nil {
 		return err
@@ -277,12 +229,22 @@ func isEmpty(o Object) error {
 	return nil
 }
 
-// Get position of the null byte, to separate header from content.
-func getNullBytePos(n []byte) int {
-	for i := 0; i < len(n); i++ {
-		if n[i] == 0 {
-			return i
-		}
+func Exists(hash string) error {
+	objectDir, err := utils.GetGitSubdir("objects")
+	if err != nil {
+		return err
 	}
-	return len(n)
+	objectSubDir, objectName, err := utils.SplitHash(hash)
+	if err != nil {
+		return err
+	}
+	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
+	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
+		return err
+	}
+	objectFileName := filepath.Join(objectSubDirPath, objectName)
+	if _, err := os.Stat(objectFileName); os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
