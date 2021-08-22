@@ -3,6 +3,7 @@ package cmds
 import (
 	"os"
 	"strings"
+	"fmt"
 
 	"github.com/antoniszczepanik/gggit/refs"
 	"github.com/antoniszczepanik/gggit/utils"
@@ -13,11 +14,12 @@ func Status(args []string) {
 	if err != nil {
 		utils.Usage("could not get current commit")
 	}
-	refPath, err := refs.GetCurrentRef()
+	refPath, err := refs.GetCurrentRefPath()
 	if err != nil {
-		utils.Usage("detached HEAD mode on " + currentCommitHash)
+		fmt.Printf("detached HEAD mode on %s\n", currentCommitHash)
+		return
 	}
-	utils.Usage("On branch " + getBranchName(refPath))
+	fmt.Printf("On branch %s (commit %s)\n", getBranchName(refPath), currentCommitHash)
 }
 
 func getBranchName(refPath string) string {

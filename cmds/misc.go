@@ -23,10 +23,6 @@ func Cat(args []string) {
 	}
 }
 
-func Checkout(args []string) {
-	fmt.Println("checkout")
-}
-
 func Ls(args []string) {
 	fmt.Println("ls-tree")
 }

@@ -33,21 +33,21 @@ func Commit(args []string) {
 	if err != nil {
 		utils.Usage("could not get hash for new commit")
 	}
-	refPath, err := refs.GetCurrentRef()
+	refPath, err := refs.GetCurrentRefPath()
 	if err != nil {
 		utils.Usage("cannot get current ref. Are you in detached HEAD mode?")
 	}
-	err = refs.UpdateRef(refPath, commitHash)
+	err = refs.PointRefAt(refPath, commitHash)
 	if err != nil {
 		fmt.Println(err)
 		utils.Usage("cannot update current ref")
 	}
-	err = refs.CheckoutRef(refPath)
+	err = refs.PointHeadAt(refPath)
 	if err != nil {
 		fmt.Println(err)
 		utils.Usage("could not checkout the new ref")
 	}
-	fmt.Println("commit " + commitHash)
+	fmt.Printf("commit %s\n", commitHash)
 	err = objects.PrintObject(commitHash)
 	if err != nil {
 		utils.Usage("could not print commit content")

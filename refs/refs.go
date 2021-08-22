@@ -17,20 +17,21 @@ type HeadPointer struct {
 	content string
 }
 
+// Resolve hash of commit HEAD points at.
 func (hp HeadPointer) hash() (string, error) {
 	isDetached, err := hp.detached()
 	if err != nil {
 		return "", err
 	}
+	// Content includes a line feed.
 	if isDetached {
-		// Content includes a line feed.
 		return removeLastChar(hp.content), nil
 	}
 	refPath, err := parseRef(hp.content)
 	if err != nil {
 		return "", err
 	}
-	return readHashFromRef(refPath)
+	return ReadHashFromRef(refPath)
 }
 
 // Get ref path from contents of HEAD file.
@@ -67,7 +68,8 @@ func readHeadPointer() (HeadPointer, error) {
 	return HeadPointer{content: string(content)}, nil
 }
 
-func GetCurrentRef() (string, error) {
+// Get path of the ref that HEAD is currently pointing at.
+func GetCurrentRefPath() (string, error) {
 	hp, err := readHeadPointer()
 	if err != nil {
 		return "", err
@@ -95,7 +97,7 @@ func GetHeadCommitHash() (string, error) {
 }
 
 // Returns empty string if ref does not exist yet.
-func readHashFromRef(refPath string) (string, error) {
+func ReadHashFromRef(refPath string) (string, error) {
 	f, err := utils.GetGitFile(refPath)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -125,9 +127,8 @@ func CreateNewRef(name string) (*os.File, error) {
 	return newRefFile, nil
 }
 
-// Update ref contents to point at a given hash.
-// Creates ref file if such does not exists.
-func UpdateRef(refPath string, commitHash string) error {
+// Creates ref file if does not exists.
+func PointRefAt(refPath string, commitHash string) error {
 	filePath, err := utils.GetGitFilePath(refPath)
 	if err != nil {
 		return err
@@ -144,8 +145,7 @@ func UpdateRef(refPath string, commitHash string) error {
 	return nil
 }
 
-// Point HEAD at ref.
-func CheckoutRef(refPath string) error {
+func PointHeadAt(refPath string) error {
 	headPath, err := utils.GetGitFilePath("HEAD")
 	if err != nil {
 		return err
@@ -164,6 +164,18 @@ func CheckoutRef(refPath string) error {
 
 func GetRefPath(branchName string) string {
 	return "refs/heads/" + branchName
+}
+
+func Exists(refName string) bool {
+	refPath := GetRefPath(refName)
+	refAbsPath, err := utils.GetGitFilePath(refPath)
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(refAbsPath); os.IsNotExist(err) {
+		return false
+	}
+	return true
 }
 
 // Remove line feeds and whatnot.
