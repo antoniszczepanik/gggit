@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -100,7 +101,6 @@ func SplitHash(hash string) (string, string, error) {
 	return hash[:2], hash[2:], nil
 }
 
-
 // Get position of the null byte, to separate header from content.
 func GetNullBytePos(n []byte) int {
 	for i := 0; i < len(n); i++ {
@@ -109,4 +109,12 @@ func GetNullBytePos(n []byte) int {
 		}
 	}
 	return len(n)
+}
+
+func Usage(msg string) {
+	_, err := io.WriteString(os.Stderr, msg+"\n")
+	if err != nil {
+		panic("whut")
+	}
+	os.Exit(1)
 }

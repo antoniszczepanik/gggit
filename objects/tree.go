@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/antoniszczepanik/gggit/utils"
@@ -146,4 +146,20 @@ func CreateTreeObject(dirpath string) (Tree, error) {
 		t = append(t, tEntry)
 	}
 	return t, nil
+}
+
+// Assumes caller verified that path points at a directory.
+func HashTree(path string, write bool) (string, error) {
+	t, err := CreateTreeObject(path)
+	if errors.Is(err, ErrEmptyTree) {
+		return "", errors.New("directory is empty")
+	} else if err != nil {
+		return "", err
+	}
+	if write {
+		if err := WriteTree(t); err != nil {
+			return "", err
+		}
+	}
+	return GetHash(t)
 }
