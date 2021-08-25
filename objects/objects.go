@@ -70,12 +70,12 @@ func Write(o Object) error {
 }
 
 // Read object object :).
-func ReadObject(hash string) (Object, error) {
+func Read(hash string) (Object, error) {
 	content, objectType, err := getObjectContent(hash)
 	if err != nil {
 		return nil, err
 	}
-	return parseObject(objectType, content)
+	return parse(objectType, content)
 }
 
 // Print object contents by hash name.
@@ -184,7 +184,7 @@ func splitHeader(header string) (string, int, error) {
 }
 
 // Return specific object for arbitrary type and contents.
-func parseObject(objectType string, contents []byte) (Object, error) {
+func parse(objectType string, contents []byte) (Object, error) {
 	switch objectType {
 	case blob:
 		return parseBlob(contents)

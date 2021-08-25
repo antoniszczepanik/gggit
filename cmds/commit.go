@@ -14,14 +14,17 @@ func Commit(args []string) {
 	if err != nil {
 		utils.Usage("not a git repository (or any of the parent directories)")
 	}
-	hash, err := objects.HashTree(repoRoot, true)
+	treeHash, err := objects.HashTree(repoRoot, true)
 	if err != nil {
-		fmt.Println(err)
-		utils.Usage("failed to hash current tree")
+		utils.Usage(err.Error())
 	}
 	// TODO: Add possibility to specify own message.
 	msg := "Hello from gggit."
-	c, err := objects.CreateCommitObject(hash, msg)
+	parentHash, err := refs.GetHeadCommitHash()
+	if err != nil {
+		utils.Usage(err.Error())
+	}
+	c, err := objects.CreateCommitObject(treeHash, parentHash, msg)
 	if err != nil {
 		utils.Usage("failed to create commit object")
 	}

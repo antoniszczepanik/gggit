@@ -9,16 +9,19 @@ import (
 	"strings"
 
 	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/objects"
 )
 
-var ErrMissingRef = errors.New("head points to a missing ref")
+var ErrMissingRef = errors.New("HEAD points to a missing ref")
 
-type HeadPointer struct {
+var ErrDetachedHead = errors.New("HEAD is in detached mode")
+
+type headPointer struct {
 	content string
 }
 
 // Resolve hash of commit HEAD points at.
-func (hp HeadPointer) hash() (string, error) {
+func (hp headPointer) hash() (string, error) {
 	isDetached, err := hp.detached()
 	if err != nil {
 		return "", err
@@ -34,6 +37,15 @@ func (hp HeadPointer) hash() (string, error) {
 	return ReadHashFromRef(refPath)
 }
 
+func (hp headPointer) detached() (bool, error) {
+	if len(hp.content) < len("ref: refs/heads/a\n") {
+		return false, errors.New("head points to invalid ref")
+	}
+	if hp.content[:5] == "ref: " {
+		return false, nil
+	}
+	return true, nil
+}
 // Get ref path from contents of HEAD file.
 func parseRef(headContent string) (string, error) {
 	var refPath string
@@ -45,27 +57,17 @@ func parseRef(headContent string) (string, error) {
 	return refPath, nil
 }
 
-func (hp HeadPointer) detached() (bool, error) {
-	if len(hp.content) < len("ref: refs/heads/a\n") {
-		return false, errors.New("head points to invalid ref")
-	}
-	if hp.content[:5] == "ref: " {
-		return false, nil
-	}
-	return true, nil
-}
-
-func readHeadPointer() (HeadPointer, error) {
+func readHeadPointer() (headPointer, error) {
 	f, err := utils.GetGitFile("HEAD")
 	if err != nil {
-		return HeadPointer{}, err
+		return headPointer{}, err
 	}
 	defer f.Close()
 	content, err := io.ReadAll(f)
 	if err != nil {
-		return HeadPointer{}, err
+		return headPointer{}, err
 	}
-	return HeadPointer{content: string(content)}, nil
+	return headPointer{content: string(content)}, nil
 }
 
 // Get path of the ref that HEAD is currently pointing at.
@@ -79,13 +81,27 @@ func GetCurrentRefPath() (string, error) {
 		return "", err
 	}
 	if isDetached {
-		return "", errors.New("head is detached, could not get current ref")
+		return "", ErrDetachedHead
 	}
 	refPath, err := parseRef(hp.content)
 	if err != nil {
 		return "", err
 	}
 	return refPath, nil
+}
+
+func GetHeadTreeHash() (string, error){
+	commitHash, err := GetHeadCommitHash()
+	fmt.Println("commit hash", commitHash)
+	if err != nil {
+		return "", err
+	}
+	commit, err := objects.Read(commitHash)
+	fmt.Println("commit:", commit)
+	if err != nil {
+		return "", err
+	}
+	return commit.(objects.Commit).TreeHash, nil
 }
 
 func GetHeadCommitHash() (string, error) {
@@ -98,14 +114,14 @@ func GetHeadCommitHash() (string, error) {
 
 // Returns empty string if ref does not exist yet.
 func ReadHashFromRef(refPath string) (string, error) {
-	f, err := utils.GetGitFile(refPath)
+	ref, err := utils.GetGitFile(refPath)
 	if os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	content, err := io.ReadAll(f)
+	defer ref.Close()
+	content, err := io.ReadAll(ref)
 	if err != nil {
 		return "", err
 	}
@@ -183,5 +199,5 @@ func removeLastChar(text string) string {
 	if len(text) == 0 {
 		return ""
 	}
-	return text[:len(text)-2]
+	return text[:len(text)-1]
 }

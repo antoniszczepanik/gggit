@@ -3,8 +3,6 @@ package objects
 import (
 	"fmt"
 	"time"
-
-	"github.com/antoniszczepanik/gggit/refs"
 )
 
 const commit string = "commit"
@@ -44,18 +42,17 @@ func parseCommit(contents []byte) (Commit, error) {
 	return Commit{}, nil
 }
 
-func CreateCommitObject(treehash string, message string) (Commit, error) {
+func CreateCommitObject(treeHash string, parentHash string, message string) (Commit, error) {
 	author, err := getAuthorFromConfig()
 	if err != nil {
 		return Commit{}, err
 	}
-	headCommitHash, err := refs.GetHeadCommitHash()
 	if err != nil {
 		return Commit{}, err
 	}
 	return Commit{
-		TreeHash:   treehash,
-		ParentHash: headCommitHash,
+		TreeHash:   treeHash,
+		ParentHash: parentHash,
 		Author:     author,
 		Time:       time.Now(),
 		Msg:        message,

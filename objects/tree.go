@@ -40,6 +40,27 @@ func (t Tree) GetType() string {
 	return tree
 }
 
+// Write out tree entries to working directory aka. checokut.
+// atPath is a path of a directory tree objects should be written to.
+func (t Tree) UpdateWorkdir(atPath string) error {
+	for _, tEntry := range t {
+		entry := tEntry.Entry
+		entryType := entry.GetType()
+		if entryType == blob {
+			_, err := entry.GetContent()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Would write contents to %s\n", atPath + tEntry.Name)
+		} else if entryType == tree {
+			if err := entry.(Tree).UpdateWorkdir(atPath+tEntry.Name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func parseTree(contents []byte) (Tree, error) {
 	var (
 		t     Tree
@@ -58,7 +79,7 @@ func parseTree(contents []byte) (Tree, error) {
 		if err != nil {
 			return Tree{}, err
 		}
-		obj, err := ReadObject(ehash)
+		obj, err := Read(ehash)
 		if err != nil {
 			return Tree{}, err
 		}
@@ -67,7 +88,7 @@ func parseTree(contents []byte) (Tree, error) {
 	return t, nil
 }
 
-// Write tree object, recursively writing all its entries.
+// Write tree object to internal git storage, recursively writing all its entries.
 func WriteTree(t Tree) error {
 	if err := Write(t); err != nil {
 		return err
@@ -88,6 +109,7 @@ func WriteTree(t Tree) error {
 	}
 	return nil
 }
+
 
 var ErrEmptyTree = errors.New("cannot create an empty tree")
 

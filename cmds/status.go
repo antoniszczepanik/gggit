@@ -15,9 +15,11 @@ func Status(args []string) {
 		utils.Usage("could not get current commit")
 	}
 	refPath, err := refs.GetCurrentRefPath()
-	if err != nil {
+	if err == refs.ErrDetachedHead {
 		fmt.Printf("detached HEAD mode on %s\n", currentCommitHash)
 		return
+	} else if err != nil {
+		utils.Usage("could not get current ref path")
 	}
 	fmt.Printf("On branch %s (commit %s)\n", getBranchName(refPath), currentCommitHash)
 }
