@@ -9,7 +9,6 @@ import (
 )
 
 func Commit(args []string) {
-	// TODO: Split this to multiple methods. Should cmd helpers be in main?
 	repoRoot, err := utils.GetRepoRoot("")
 	if err != nil {
 		utils.Usage("not a git repository (or any of the parent directories)")

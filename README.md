@@ -11,14 +11,28 @@ The aims of this project are rather selfish, that is:
  - to improve my Go skills
  - to gain a better understanding of Git plumbing
 
-## quick start
+ Currently supported commands are:
 
-It is really easy to try the thing out!
+ `gggit hash-object`
+ `gggit cat-file`
+ `gggit status`
+ `gggit commit`
+
+## quick start
 
 ```
 go install github.com/antoniszczepanik/gggit@v0.1.0
 
 mkdir project1 && cd project1
 gggit init
+
 ```
-(assuming GOPATH is in your PATH)
+
+### todo
+
+- basic checkout command support (for now let's focus on checking out a branch)
+- index (!!!), add, reset
+- `.gitignore` support
+- config file support
+- commits serializitation/deserialization is not complete, cannot specify own message :(
+- not all permission bits are not
