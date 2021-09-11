@@ -75,23 +75,6 @@ func GetGitFilePath(filename string) (string, error) {
 	return filepath.Join(gitDir, filename), nil
 }
 
-// Split contents by a sep.
-func SplitEntries(contents []byte, sep byte) [][]byte {
-	var (
-		splitted [][]byte
-		split    []byte
-	)
-	for _, c := range contents {
-		if c != sep {
-			split = append(split, c)
-		} else {
-			splitted = append(splitted, split)
-			split = nil
-		}
-	}
-	return splitted
-}
-
 // Split hash to get directory and filename, so that
 // serialized objects are scattered among directories.
 func SplitHash(hash string) (string, string, error) {
@@ -101,20 +84,11 @@ func SplitHash(hash string) (string, string, error) {
 	return hash[:2], hash[2:], nil
 }
 
-// Get position of the null byte, to separate header from content.
-func GetNullBytePos(n []byte) int {
-	for i := 0; i < len(n); i++ {
-		if n[i] == 0 {
-			return i
-		}
-	}
-	return len(n)
-}
 
 func Usage(msg string) {
 	_, err := io.WriteString(os.Stderr, msg+"\n")
 	if err != nil {
-		panic("whut")
+		panic("I have no idea what's going on. Do you?")
 	}
 	os.Exit(1)
 }

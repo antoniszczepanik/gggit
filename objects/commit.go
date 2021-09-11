@@ -22,7 +22,7 @@ type AuthorType struct {
 	Email string
 }
 
-func (c Commit) GetContent() ([]byte, error) {
+func (c Commit) GetContent() (string, error) {
 	content := fmt.Sprintf("tree %s\n", c.TreeHash)
 	if c.ParentHash != "" {
 		content += fmt.Sprintf("parent %s\n", c.ParentHash)
@@ -31,14 +31,26 @@ func (c Commit) GetContent() ([]byte, error) {
 	time := fmt.Sprintf("%d %d", c.Time.Unix(), offset)
 	content += fmt.Sprintf("author %s <%s> %s\n\n", c.Author.Name, c.Author.Email, time)
 	content += fmt.Sprintf("%s\n", c.Msg)
-	return []byte(content), nil
+	return content, nil
 }
 
 func (c Commit) GetType() string {
 	return commit
 }
 
-func parseCommit(contents []byte) (Commit, error) {
+func (c Commit) Write() error {
+	return Write(c)
+}
+
+func ReadCommit(hash string) (Commit, error) {
+	// TODO: Add method to read commit by hash.
+	hash += "a"
+	return Commit{}, nil
+}
+
+func parseCommit(contents string) (Commit, error) {
+	// TODO: Add method to parse contents of commit from file.
+	contents += "a"
 	return Commit{}, nil
 }
 

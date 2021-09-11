@@ -32,7 +32,7 @@ func Commit(args []string) {
 	if err != nil {
 		utils.Usage("failed to write a commit object")
 	}
-	commitHash, err := objects.GetHash(c)
+	commitHash, err := objects.CalculateHash(c)
 	if err != nil {
 		utils.Usage("could not get hash for new commit")
 	}

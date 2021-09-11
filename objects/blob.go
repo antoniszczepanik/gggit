@@ -7,30 +7,33 @@ import (
 const blob string = "blob"
 
 type Blob struct {
-	fileData []byte
+	content string
 }
 
-func (b Blob) GetContent() ([]byte, error) {
-	return b.fileData, nil
+func NewBlob(content string) Blob {
+	return Blob{content: content}
+}
+
+func NewBlobFromFile(filepath string) (Blob, error) {
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		return Blob{}, err
+	}
+	return NewBlob(string(content)), nil
+}
+
+func (b Blob) GetContent() (string, error) {
+	return b.content, nil
 }
 
 func (b Blob) GetType() string {
 	return blob
 }
 
-func parseBlob(contents []byte) (Blob, error) {
-	return Blob{
-		fileData: contents,
-	}, nil
+func (b Blob) Write() error {
+	return Write(b)
 }
 
-// Create blob object from contents of a file.
-func CreateBlobObject(filepath string) (Blob, error) {
-	content, err := os.ReadFile(filepath)
-	if err != nil {
-		return Blob{}, err
-	}
-	return Blob{
-		fileData: content,
-	}, nil
+func parseBlob(content string) (Blob, error) {
+	return NewBlob(content), nil
 }

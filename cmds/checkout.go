@@ -12,6 +12,7 @@ func Checkout(args []string) {
 	case 0:
 		utils.Usage("You should provide ref/hash you would like to checkout")
 	case 1:
+		// TODO: For now this assumes that ref is a branch name.
 		if !refs.Exists(args[0]) {
 			utils.Usage(fmt.Sprintf("ref %s does not exist", args[0]))
 		}

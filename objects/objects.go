@@ -8,18 +8,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/antoniszczepanik/gggit/utils"
 )
 
+const HeaderFmt = "%s %d\000"
+
 type Object interface {
-	GetContent() ([]byte, error)
+	GetContent() (string, error)
 	GetType() string
+	Write() error
 }
 
-// Write object contents to internal git storage.
+// Generic write object method.
 func Write(o Object) error {
 	if err := IsEmpty(o); err != nil {
 		return err
@@ -28,7 +30,7 @@ func Write(o Object) error {
 	if err != nil {
 		return err
 	}
-	hash, err := GetHash(o)
+	hash, err := CalculateHash(o)
 	if err != nil {
 		return err
 	}
@@ -37,7 +39,6 @@ func Write(o Object) error {
 		return err
 	}
 	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
-	// Create a subdirectory if does not exist.
 	if _, err := os.ReadDir(objectSubDirPath); os.IsNotExist(err) {
 		err = os.Mkdir(objectSubDirPath, 0755)
 		if err != nil {
@@ -58,147 +59,129 @@ func Write(o Object) error {
 	// Compress and write file contents.
 	w := zlib.NewWriter(f)
 	defer w.Close()
-	fullContent, err := constructFullContent(o)
+	rawContent, err := constructRawContent(o)
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(fullContent)
+	_, err = w.Write([]byte(rawContent))
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// Read object object :).
 func Read(hash string) (Object, error) {
-	content, objectType, err := getObjectContent(hash)
+	rawContent, err := getObjectRawContent(hash)
 	if err != nil {
 		return nil, err
 	}
-	return parse(objectType, content)
+	objType, _, content, err := splitRawContent(rawContent)
+	if err != nil {
+		return nil, err
+	}
+	switch objType {
+	case blob:
+		return parseBlob(content)
+	case tree:
+		return parseTree(content)
+	case commit:
+		return parseCommit(content)
+	default:
+		return nil, fmt.Errorf("unexpected object type %s", objType)
+	}
 }
 
 // Print object contents by hash name.
 func PrintObject(hash string) error {
-	content, _, err := getObjectContent(hash)
+	rawContent, err := getObjectRawContent(hash)
 	if err != nil {
 		return err
 	}
-	fmt.Print(string(content))
+	_, _, content, err := splitRawContent(rawContent)
+	if err != nil {
+		return err
+	}
+	fmt.Print(content)
 	return nil
 }
 
-func getObjectContent(hash string) ([]byte, string, error) {
+func getObjectRawContent(hash string) (string, error) {
 	objectDir, err := utils.GetGitSubdir("objects")
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	objectSubDir, objectName, err := utils.SplitHash(hash)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	objectSubDirPath := filepath.Join(objectDir, objectSubDir)
 	if _, err := os.Stat(objectSubDirPath); os.IsNotExist(err) {
-		return nil, "", fmt.Errorf("object %s does not exist", hash)
+		return "", fmt.Errorf("object %s does not exist", hash)
 	}
 
 	objectPath := filepath.Join(objectSubDirPath, objectName)
 	if _, err := os.Stat(objectPath); os.IsNotExist(err) {
-		return nil, "", fmt.Errorf("object %s does not exist", hash)
+		return "", fmt.Errorf("object %s does not exist", hash)
 	}
 	f, err := os.Open(objectPath)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	r, err := zlib.NewReader(f)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	defer r.Close()
-	fullContents, err := io.ReadAll(r)
+	rawContent, err := io.ReadAll(r)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	pos := utils.GetNullBytePos(fullContents)
-	if len(fullContents) < pos {
-		return nil, "", errors.New("invalid object format")
-	}
-	objectType, _, err := splitHeader(string(fullContents[:pos]))
-	if err != nil {
-		return nil, "", err
-	}
-	return fullContents[pos+1:], objectType, nil
+	return string(rawContent), nil
 }
 
-// Get hash of an object.
-func GetHash(o Object) (string, error) {
+// Calculate hash of an object.
+func CalculateHash(o Object) (string, error) {
 	if err := IsEmpty(o); err != nil {
 		return "", err
 	}
-	fullContent, err := constructFullContent(o)
+	rawContent, err := constructRawContent(o)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%x", sha1.Sum(fullContent)), nil
+	return fmt.Sprintf("%x", sha1.Sum([]byte(rawContent))), nil
 }
 
 // Construct header of an object.
-func getHeader(o Object) ([]byte, error) {
+func getHeader(o Object) (string, error) {
 	if err := IsEmpty(o); err != nil {
-		return nil, err
+		return "", err
 	}
 	content, err := o.GetContent()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return []byte(fmt.Sprintf("%s %d\000", o.GetType(), len(content))), nil
+	return fmt.Sprintf(HeaderFmt, o.GetType(), len(content)), nil
 }
 
-// Get full object contents, header and actual content.
-func constructFullContent(o Object) ([]byte, error) {
+// Get raw object contents, header and actual content.
+func constructRawContent(o Object) (string, error) {
 	if err := IsEmpty(o); err != nil {
-		return nil, err
+		return "", err
 	}
 	header, err := getHeader(o)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	content, err := o.GetContent()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return append(header, content...), nil
-}
-
-// Parse file header to get object type and its size.
-func splitHeader(header string) (string, int, error) {
-	words := strings.Fields(header)
-	if len(words) != 2 {
-		return "", 0, errors.New("invalid header format")
-	}
-	size, err := strconv.Atoi(words[1])
-	if err != nil {
-		return "", 0, err
-	}
-	return words[0], size, nil
-}
-
-// Return specific object for arbitrary type and contents.
-func parse(objectType string, contents []byte) (Object, error) {
-	switch objectType {
-	case blob:
-		return parseBlob(contents)
-	case commit:
-		return parseCommit(contents)
-	case tree:
-		return parseTree(contents)
-	}
-	return nil, fmt.Errorf("cannot parse object %s", objectType)
+	return header + content, nil
 }
 
 type EmptyObjectError struct {
 	Msg     string
-	Content []byte
+	Content string
 	Type    string
 }
 
@@ -212,7 +195,7 @@ func IsEmpty(o Object) error {
 	if err != nil {
 		return err
 	}
-	if content == nil {
+	if content == "" {
 		return &EmptyObjectError{
 			Msg:     "empty object content",
 			Type:    o.GetType(),
@@ -247,4 +230,31 @@ func Exists(hash string) error {
 		return err
 	}
 	return nil
+}
+
+// Split raw object content into object type, size and actual content.
+func splitRawContent(rawContent string) (string, int, string, error) {
+	headerEnd := strings.Index(rawContent, "\000")
+	if headerEnd == -1 {
+		return "", 0, "", errors.New("no null byte in raw content")
+	}
+	header, content := rawContent[:headerEnd+1], rawContent[headerEnd+1:]
+	objType, objSize, err := parseHeader(header)
+	if err != nil {
+		return "", 0, "", err
+	}
+	return objType, objSize, content, nil
+}
+
+func parseHeader(header string) (string, int, error) {
+	var (
+		objType string
+		objSize int
+	)
+	r := strings.NewReader(header)
+	_, err := fmt.Fscanf(r, HeaderFmt, &objType, &objSize)
+	if err != nil {
+		return "", 0, err
+	}
+	return objType, objSize, nil
 }

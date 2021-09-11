@@ -47,7 +47,7 @@ func hashEntityByType(path string, write bool) (string, error) {
 }
 
 func hashFile(path string, write bool) (string, error) {
-	object, err := objects.CreateBlobObject(path)
+	object, err := objects.NewBlobFromFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -56,5 +56,5 @@ func hashFile(path string, write bool) (string, error) {
 			return "", err
 		}
 	}
-	return objects.GetHash(object)
+	return objects.CalculateHash(object)
 }
