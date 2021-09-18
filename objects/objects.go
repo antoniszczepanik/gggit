@@ -13,11 +13,13 @@ import (
 	"github.com/antoniszczepanik/gggit/utils"
 )
 
+type ObjectType string
+
 const HeaderFmt = "%s %d\000"
 
 type Object interface {
 	GetContent() (string, error)
-	GetType() string
+	GetType() ObjectType
 	Write() error
 }
 
@@ -80,11 +82,11 @@ func Read(hash string) (Object, error) {
 		return nil, err
 	}
 	switch objType {
-	case blob:
+	case BlobObject:
 		return parseBlob(content)
-	case tree:
+	case TreeObject:
 		return parseTree(content)
-	case commit:
+	case CommitObject:
 		return parseCommit(content)
 	default:
 		return nil, fmt.Errorf("unexpected object type %s", objType)
@@ -182,7 +184,7 @@ func constructRawContent(o Object) (string, error) {
 type EmptyObjectError struct {
 	Msg     string
 	Content string
-	Type    string
+	Type    ObjectType
 }
 
 func (o EmptyObjectError) Error() string {
@@ -233,7 +235,7 @@ func Exists(hash string) error {
 }
 
 // Split raw object content into object type, size and actual content.
-func splitRawContent(rawContent string) (string, int, string, error) {
+func splitRawContent(rawContent string) (ObjectType, int, string, error) {
 	headerEnd := strings.Index(rawContent, "\000")
 	if headerEnd == -1 {
 		return "", 0, "", errors.New("no null byte in raw content")
@@ -246,9 +248,9 @@ func splitRawContent(rawContent string) (string, int, string, error) {
 	return objType, objSize, content, nil
 }
 
-func parseHeader(header string) (string, int, error) {
+func parseHeader(header string) (ObjectType, int, error) {
 	var (
-		objType string
+		objType ObjectType
 		objSize int
 	)
 	r := strings.NewReader(header)

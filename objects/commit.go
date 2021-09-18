@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const commit string = "commit"
+const CommitObject ObjectType = "commit"
 
 type Commit struct {
 	TreeHash   string
@@ -34,8 +34,8 @@ func (c Commit) GetContent() (string, error) {
 	return content, nil
 }
 
-func (c Commit) GetType() string {
-	return commit
+func (c Commit) GetType() ObjectType {
+	return CommitObject
 }
 
 func (c Commit) Write() error {
@@ -43,7 +43,14 @@ func (c Commit) Write() error {
 }
 
 func ReadCommit(hash string) (Commit, error) {
-	hash += "a"
+	rawContent, err := getObjectRawContent(hash)
+	if err != nil {
+		return Commit{}, err
+	}
+	_, _, _, err = splitRawContent(rawContent)
+	if err != nil {
+		return Commit{}, err
+	}
 	return Commit{
 		TreeHash: "this is a tree hash of dummy commit",
 		ParentHash: "",

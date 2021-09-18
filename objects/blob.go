@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-const blob string = "blob"
+const BlobObject ObjectType = "blob"
 
 type Blob struct {
 	content string
@@ -26,8 +26,8 @@ func (b Blob) GetContent() (string, error) {
 	return b.content, nil
 }
 
-func (b Blob) GetType() string {
-	return blob
+func (b Blob) GetType() ObjectType {
+	return BlobObject
 }
 
 func (b Blob) Write() error {

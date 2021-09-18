@@ -11,7 +11,7 @@ import (
 	"github.com/antoniszczepanik/gggit/utils"
 )
 
-const tree string = "tree"
+const TreeObject ObjectType = "tree"
 
 type Tree []treeEntry
 
@@ -36,8 +36,8 @@ func (t Tree) GetContent() (string, error) {
 	return content, nil
 }
 
-func (t Tree) GetType() string {
-	return tree
+func (t Tree) GetType() ObjectType {
+	return TreeObject
 }
 
 func (t Tree) Write() error {
