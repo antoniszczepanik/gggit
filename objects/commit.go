@@ -3,6 +3,7 @@ package objects
 import (
 	"fmt"
 	"time"
+	"strings"
 )
 
 const CommitObject ObjectType = "commit"
@@ -47,26 +48,42 @@ func ReadCommit(hash string) (Commit, error) {
 	if err != nil {
 		return Commit{}, err
 	}
-	_, _, _, err = splitRawContent(rawContent)
+	objectType, _, content, err := splitRawContent(rawContent)
 	if err != nil {
 		return Commit{}, err
 	}
-	return Commit{
-		TreeHash: "this is a tree hash of dummy commit",
-		ParentHash: "",
-		Author: Author{
-			Name: "Antoni Szczepanik",
-			Email: "szczepanik.antoni@gmail.com",
-		},
-		Time: time.Now(),
-		Msg: "dummy commit message",
-	}, nil
+	if objectType != CommitObject {
+		return Commit{}, fmt.Errorf("could not read commit %s: invalid object type '%s'", hash, objectType)
+	}
+	return parseCommit(content)
 }
 
-func parseCommit(contents string) (Commit, error) {
-	// TODO: Add method to parse contents of commit from file.
-	contents += "a"
-	return Commit{}, nil
+func parseCommit(content string) (Commit, error) {
+	lines := strings.Split(content, "\n")
+	isMessage := false
+	message := ""
+	for _, line := range lines {
+		if line == "" {
+			isMessage = true
+			continue
+		}
+		if !isMessage {
+			values :=  strings.SplitN(line, " ", 2)
+			if len(values) == 2 {
+				key := values[0]
+				// TODO: Add specific parsing methods.
+				switch key {
+				case "tree":
+				case "parent":
+				case "author":
+				}
+			}
+		} else {
+			message += line
+		}
+	}
+	return Commit{
+	}, nil
 }
 
 func CreateCommitObject(treeHash string, parentHash string, message string) (Commit, error) {

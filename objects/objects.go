@@ -77,11 +77,11 @@ func Read(hash string) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	objType, _, content, err := splitRawContent(rawContent)
+	objectType, _, content, err := splitRawContent(rawContent)
 	if err != nil {
 		return nil, err
 	}
-	switch objType {
+	switch objectType {
 	case BlobObject:
 		return parseBlob(content)
 	case TreeObject:
@@ -89,7 +89,7 @@ func Read(hash string) (Object, error) {
 	case CommitObject:
 		return parseCommit(content)
 	default:
-		return nil, fmt.Errorf("unexpected object type %s", objType)
+		return nil, fmt.Errorf("unexpected object type %s", objectType)
 	}
 }
 
@@ -241,22 +241,22 @@ func splitRawContent(rawContent string) (ObjectType, int, string, error) {
 		return "", 0, "", errors.New("no null byte in raw content")
 	}
 	header, content := rawContent[:headerEnd+1], rawContent[headerEnd+1:]
-	objType, objSize, err := parseHeader(header)
+	objectType, objectSize, err := parseHeader(header)
 	if err != nil {
 		return "", 0, "", err
 	}
-	return objType, objSize, content, nil
+	return objectType, objectSize, content, nil
 }
 
 func parseHeader(header string) (ObjectType, int, error) {
 	var (
-		objType ObjectType
-		objSize int
+		objectType ObjectType
+		objectSize int
 	)
 	r := strings.NewReader(header)
-	_, err := fmt.Fscanf(r, HeaderFmt, &objType, &objSize)
+	_, err := fmt.Fscanf(r, HeaderFmt, &objectType, &objectSize)
 	if err != nil {
 		return "", 0, err
 	}
-	return objType, objSize, nil
+	return objectType, objectSize, nil
 }
