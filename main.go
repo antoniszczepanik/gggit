@@ -17,6 +17,8 @@ func main() {
 	switch cmd {
 	case "add":
 		cmds.Add(args)
+	case "branch":
+		cmds.Branch(args)
 	case "cat-file":
 		cmds.Cat(args)
 	case "checkout":
