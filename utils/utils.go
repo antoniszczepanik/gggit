@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-const GITDIR string = ".gggit"
+const GitDirName = ".gggit"
 
 // Find git directory and return its specific subdirectory.
 func GetGitSubdir(subdirName string) (string, error) {
@@ -29,7 +29,7 @@ func GetGitDir(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(repoDir, GITDIR), nil
+	return filepath.Join(repoDir, GitDirName), nil
 }
 
 // Get a path to repository root.
@@ -41,7 +41,7 @@ func GetRepoRoot(path string) (string, error) {
 			return "", err
 		}
 	}
-	gitPath := filepath.Join(path, GITDIR)
+	gitPath := filepath.Join(path, GitDirName)
 	if _, err = os.ReadDir(gitPath); os.IsNotExist(err) {
 		if path == "/" {
 			return "", errors.New("did not find git directory")

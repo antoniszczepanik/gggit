@@ -10,14 +10,14 @@ const commit string = "commit"
 type Commit struct {
 	TreeHash   string
 	ParentHash string
-	Author     AuthorType
+	Author     Author
 	// TODO: Should be represented as in RFC 2822. On drive it will be stored
 	// as unixts timezoneoffset
 	Time time.Time
 	Msg  string
 }
 
-type AuthorType struct {
+type Author struct {
 	Name  string
 	Email string
 }
@@ -43,9 +43,17 @@ func (c Commit) Write() error {
 }
 
 func ReadCommit(hash string) (Commit, error) {
-	// TODO: Add method to read commit by hash.
 	hash += "a"
-	return Commit{}, nil
+	return Commit{
+		TreeHash: "this is a tree hash of dummy commit",
+		ParentHash: "",
+		Author: Author{
+			Name: "Antoni Szczepanik",
+			Email: "szczepanik.antoni@gmail.com",
+		},
+		Time: time.Now(),
+		Msg: "dummy commit message",
+	}, nil
 }
 
 func parseCommit(contents string) (Commit, error) {
@@ -71,8 +79,8 @@ func CreateCommitObject(treeHash string, parentHash string, message string) (Com
 	}, nil
 }
 
-func getAuthorFromConfig() (AuthorType, error) {
-	return AuthorType{
+func getAuthorFromConfig() (Author, error) {
+	return Author{
 		Name:  "Antoni Szczepanik",
 		Email: "szczepanik.antoni@gmail.com",
 	}, nil

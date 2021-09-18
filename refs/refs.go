@@ -92,16 +92,14 @@ func GetCurrentRefPath() (string, error) {
 
 func GetHeadTreeHash() (string, error){
 	commitHash, err := GetHeadCommitHash()
-	fmt.Println("commit hash", commitHash)
 	if err != nil {
 		return "", err
 	}
-	commit, err := objects.Read(commitHash)
-	fmt.Println("commit:", commit)
+	commit, err := objects.ReadCommit(commitHash)
 	if err != nil {
 		return "", err
 	}
-	return commit.(objects.Commit).TreeHash, nil
+	return commit.TreeHash, nil
 }
 
 func GetHeadCommitHash() (string, error) {
@@ -178,17 +176,17 @@ func PointHeadAt(refPath string) error {
 	return nil
 }
 
-func GetRefPath(branchName string) string {
+func GetBranchRefPath(branchName string) string {
 	return "refs/heads/" + branchName
 }
 
-func Exists(refName string) bool {
-	refPath := GetRefPath(refName)
-	refAbsPath, err := utils.GetGitFilePath(refPath)
+func Exists(branchName string) bool {
+	branchRefPath := GetBranchRefPath(branchName)
+	branchRefPathAbs, err := utils.GetGitFilePath(branchRefPath)
 	if err != nil {
 		return false
 	}
-	if _, err := os.Stat(refAbsPath); os.IsNotExist(err) {
+	if _, err := os.Stat(branchRefPathAbs); os.IsNotExist(err) {
 		return false
 	}
 	return true

@@ -130,7 +130,7 @@ func NewTreeFromDirectory(dirpath string) (Tree, error) {
 		// TODO: I hate this if. Refactor it, please!
 		if dirEntry.IsDir() {
 			// TODO: Should be handled by .gitignore not hardcoded.
-			if dirEntry.Name() == utils.GITDIR {
+			if dirEntry.Name() == utils.GitDirName {
 				continue
 			}
 			object, err = NewTreeFromDirectory(dirEntryPath)
