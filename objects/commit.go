@@ -2,8 +2,8 @@ package objects
 
 import (
 	"fmt"
-	"time"
 	"strings"
+	"time"
 )
 
 const CommitObject ObjectType = "commit"
@@ -12,10 +12,8 @@ type Commit struct {
 	TreeHash   string
 	ParentHash string
 	Author     Author
-	// TODO: Should be represented as in RFC 2822. On drive it will be stored
-	// as unixts timezoneoffset
-	Time time.Time
-	Msg  string
+	Time       time.Time
+	Msg        string
 }
 
 type Author struct {
@@ -28,9 +26,8 @@ func (c Commit) GetContent() (string, error) {
 	if c.ParentHash != "" {
 		content += fmt.Sprintf("parent %s\n", c.ParentHash)
 	}
-	_, offset := c.Time.Zone()
-	time := fmt.Sprintf("%d %d", c.Time.Unix(), offset)
-	content += fmt.Sprintf("author %s <%s> %s\n\n", c.Author.Name, c.Author.Email, time)
+	content += fmt.Sprintf(
+		"author %s <%s> %s\n\n", c.Author.Name, c.Author.Email, c.Time.Format(time.RFC822Z))
 	content += fmt.Sprintf("%s\n", c.Msg)
 	return content, nil
 }
@@ -59,23 +56,32 @@ func ReadCommit(hash string) (Commit, error) {
 }
 
 func parseCommit(content string) (Commit, error) {
+	var (
+		tree, parent, message string
+		author                Author
+		err                   error
+		t                     time.Time
+	)
 	lines := strings.Split(content, "\n")
 	isMessage := false
-	message := ""
 	for _, line := range lines {
 		if line == "" {
 			isMessage = true
 			continue
 		}
 		if !isMessage {
-			values :=  strings.SplitN(line, " ", 2)
+			values := strings.SplitN(line, " ", 2)
 			if len(values) == 2 {
-				key := values[0]
-				// TODO: Add specific parsing methods.
-				switch key {
+				switch values[0] {
 				case "tree":
+					tree = values[1]
 				case "parent":
+					parent = values[1]
 				case "author":
+					author, t, err = parseAuthor(values[1])
+					if err != nil {
+						return Commit{}, err
+					}
 				}
 			}
 		} else {
@@ -83,7 +89,29 @@ func parseCommit(content string) (Commit, error) {
 		}
 	}
 	return Commit{
+		TreeHash:   tree,
+		ParentHash: parent,
+		Author:     author,
+		Time:       t,
+		Msg:        message,
 	}, nil
+}
+
+func parseAuthor(value string) (Author, time.Time, error) {
+	email_start := strings.Index(value, "<")
+	email_end := strings.Index(value, ">")
+	if email_start == -1 || email_end == -1 || email_end < email_start {
+		return Author{}, time.Time{}, fmt.Errorf("did not find email delims (<>) in %s", value)
+	}
+
+	name := strings.Trim(value[:email_start], " ")
+	email := value[email_start+1 : email_end]
+
+	t, err := time.Parse(time.RFC822Z, value[email_end+2:])
+	if err != nil {
+		return Author{}, time.Time{}, fmt.Errorf("could not parse time: %w", err)
+	}
+	return Author{Name: name, Email: email}, t, nil
 }
 
 func CreateCommitObject(treeHash string, parentHash string, message string) (Commit, error) {
