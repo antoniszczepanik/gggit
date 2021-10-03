@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 const CommitObject ObjectType = "commit"
@@ -11,14 +12,9 @@ const CommitObject ObjectType = "commit"
 type Commit struct {
 	TreeHash   string
 	ParentHash string
-	Author     Author
+	Author     common.Author
 	Time       time.Time
 	Msg        string
-}
-
-type Author struct {
-	Name  string
-	Email string
 }
 
 func (c Commit) GetContent() (string, error) {
@@ -58,7 +54,7 @@ func ReadCommit(hash string) (Commit, error) {
 func parseCommit(content string) (Commit, error) {
 	var (
 		tree, parent, message string
-		author                Author
+		author                common.Author
 		err                   error
 		t                     time.Time
 	)
@@ -97,11 +93,11 @@ func parseCommit(content string) (Commit, error) {
 	}, nil
 }
 
-func parseAuthor(value string) (Author, time.Time, error) {
+func parseAuthor(value string) (common.Author, time.Time, error) {
 	email_start := strings.Index(value, "<")
 	email_end := strings.Index(value, ">")
 	if email_start == -1 || email_end == -1 || email_end < email_start {
-		return Author{}, time.Time{}, fmt.Errorf("did not find email delims (<>) in %s", value)
+		return common.Author{}, time.Time{}, fmt.Errorf("did not find email delims (<>) in %s", value)
 	}
 
 	name := strings.Trim(value[:email_start], " ")
@@ -109,13 +105,13 @@ func parseAuthor(value string) (Author, time.Time, error) {
 
 	t, err := time.Parse(time.RFC822Z, value[email_end+2:])
 	if err != nil {
-		return Author{}, time.Time{}, fmt.Errorf("could not parse time: %w", err)
+		return common.Author{}, time.Time{}, fmt.Errorf("could not parse time: %w", err)
 	}
-	return Author{Name: name, Email: email}, t, nil
+	return common.Author{Name: name, Email: email}, t, nil
 }
 
 func CreateCommitObject(treeHash string, parentHash string, message string) (Commit, error) {
-	author, err := getAuthorFromConfig()
+	author, err := common.GetAuthorFromConfig()
 	if err != nil {
 		return Commit{}, err
 	}
@@ -128,12 +124,5 @@ func CreateCommitObject(treeHash string, parentHash string, message string) (Com
 		Author:     author,
 		Time:       time.Now(),
 		Msg:        message,
-	}, nil
-}
-
-func getAuthorFromConfig() (Author, error) {
-	return Author{
-		Name:  "Antoni Szczepanik",
-		Email: "szczepanik.antoni@gmail.com",
 	}, nil
 }

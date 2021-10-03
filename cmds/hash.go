@@ -5,13 +5,13 @@ import (
 	"os"
 
 	"github.com/antoniszczepanik/gggit/objects"
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 func Hash(args []string) {
 	switch len(args) {
 	case 0:
-		utils.Usage("You should provide name of an entity to hash.")
+		common.Usage("You should provide name of an entity to hash.")
 	case 1:
 		hash, err := hashEntityByType(args[0], false)
 		if err != nil {
@@ -21,7 +21,7 @@ func Hash(args []string) {
 		fmt.Println(hash)
 	case 2:
 		if args[0] != "-w" {
-			utils.Usage(fmt.Sprintf("%s is not a valid option", args[0]))
+			common.Usage(fmt.Sprintf("%s is not a valid option", args[0]))
 			return
 		}
 		hash, err := hashEntityByType(args[1], true)
@@ -31,7 +31,7 @@ func Hash(args []string) {
 		}
 		fmt.Println(hash)
 	default:
-		utils.Usage("Too many arguments")
+		common.Usage("Too many arguments")
 	}
 }
 

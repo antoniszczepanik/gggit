@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 const TreeObject ObjectType = "tree"
@@ -130,7 +130,7 @@ func NewTreeFromDirectory(dirpath string) (Tree, error) {
 		// TODO: I hate this if. Refactor it, please!
 		if dirEntry.IsDir() {
 			// TODO: Should be handled by .gitignore not hardcoded.
-			if dirEntry.Name() == utils.GitDirName {
+			if dirEntry.Name() == common.GitDirName {
 				continue
 			}
 			object, err = NewTreeFromDirectory(dirEntryPath)

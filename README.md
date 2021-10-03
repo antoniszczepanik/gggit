@@ -13,10 +13,12 @@ The aims of this project are rather selfish, that is:
 
  Currently supported commands are:
 
- `gggit hash-object`
- `gggit cat-file`
- `gggit status`
- `gggit commit`
+```
+gggit hash-object
+gggit cat-file
+gggit status
+gggit commit
+```
 
 ## quick start
 
@@ -31,8 +33,12 @@ gggit init
 ### todo
 
 - basic checkout command support (for now let's focus on checking out a branch)
+    - add git branch support, which will only create a branch from a current one
+    - add checkout to checkout given branch
+
 - index (!!!), add, reset
 - `.gitignore` support
 - config file support
 - commits serializitation/deserialization is not complete, cannot specify own message :(
-- not all permission bits are not
+- not all permission bits are set
+- clean-up logging: use idiomatic go logging solution, levels etc

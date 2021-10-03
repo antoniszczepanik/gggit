@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 type ObjectType string
@@ -28,7 +28,7 @@ func Write(o Object) error {
 	if err := IsEmpty(o); err != nil {
 		return err
 	}
-	objectDir, err := utils.GetGitSubdir("objects")
+	objectDir, err := common.GetGitSubdir("objects")
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func Write(o Object) error {
 	if err != nil {
 		return err
 	}
-	objectSubDir, objectName, err := utils.SplitHash(hash)
+	objectSubDir, objectName, err := common.SplitHash(hash)
 	if err != nil {
 		return err
 	}
@@ -108,11 +108,11 @@ func PrintObject(hash string) error {
 }
 
 func getObjectRawContent(hash string) (string, error) {
-	objectDir, err := utils.GetGitSubdir("objects")
+	objectDir, err := common.GetGitSubdir("objects")
 	if err != nil {
 		return "", err
 	}
-	objectSubDir, objectName, err := utils.SplitHash(hash)
+	objectSubDir, objectName, err := common.SplitHash(hash)
 	if err != nil {
 		return "", err
 	}
@@ -215,11 +215,11 @@ func IsEmpty(o Object) error {
 }
 
 func Exists(hash string) error {
-	objectDir, err := utils.GetGitSubdir("objects")
+	objectDir, err := common.GetGitSubdir("objects")
 	if err != nil {
 		return err
 	}
-	objectSubDir, objectName, err := utils.SplitHash(hash)
+	objectSubDir, objectName, err := common.SplitHash(hash)
 	if err != nil {
 		return err
 	}

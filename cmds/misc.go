@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/antoniszczepanik/gggit/objects"
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 func Add(args []string) {
@@ -15,7 +15,7 @@ func Add(args []string) {
 
 func Cat(args []string) {
 	if len(args) != 1 {
-		utils.Usage("You should provide hash of object to cat.")
+		common.Usage("You should provide hash of object to cat.")
 	}
 	err := objects.PrintObject(args[0])
 	if err != nil {
@@ -32,18 +32,18 @@ func Log(args []string) {
 }
 
 func LsObjects(args []string) {
-	objectsDir, err := utils.GetGitSubdir("objects")
+	objectsDir, err := common.GetGitSubdir("objects")
 	if err != nil {
-		utils.Usage("could not find git objects dir")
+		common.Usage("could not find git objects dir")
 	}
 	dirEntries, err := os.ReadDir(objectsDir)
 	if err != nil {
-		utils.Usage("could not read git objects dir")
+		common.Usage("could not read git objects dir")
 	}
 	for _, e := range dirEntries {
 		subDirEntries, err := os.ReadDir(filepath.Join(objectsDir, e.Name()))
 		if err != nil {
-			utils.Usage("could not read one of object subdirs")
+			common.Usage("could not read one of object subdirs")
 		}
 		for _, se := range subDirEntries {
 			fmt.Println(e.Name() + se.Name())

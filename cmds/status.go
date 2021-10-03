@@ -6,22 +6,22 @@ import (
 	"fmt"
 
 	"github.com/antoniszczepanik/gggit/refs"
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 func Status(args []string) {
 	currentCommitHash, err := refs.GetHeadCommitHash()
 	if err != nil {
-		utils.Usage("could not get current commit")
+		common.Usage("could not get current commit")
 	}
-	refPath, err := refs.GetCurrentRefPath()
+	branchName, err := refs.GetCurrentBranch()
 	if err == refs.ErrDetachedHead {
 		fmt.Printf("detached HEAD mode on %s\n", currentCommitHash)
 		return
 	} else if err != nil {
-		utils.Usage("could not get current ref path")
+		common.Usage("could not get current branch")
 	}
-	fmt.Printf("On branch %s (commit %s)\n", getBranchName(refPath), currentCommitHash)
+	fmt.Printf("On branch %s (commit %s)\n", branchName, currentCommitHash)
 }
 
 func getBranchName(refPath string) string {

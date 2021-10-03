@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 func Init(args []string) {
@@ -28,7 +28,7 @@ func initRepository(path string) (string, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return "", errors.New("specified directory does not exist")
 	}
-	gitdir := filepath.Join(path, utils.GitDirName)
+	gitdir := filepath.Join(path, common.GitDirName)
 	if _, err := os.Stat(gitdir); !os.IsNotExist(err) {
 		return "", fmt.Errorf("git directory already exists at %v", path)
 	}

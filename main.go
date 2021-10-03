@@ -5,12 +5,12 @@ import (
 	"os"
 
 	"github.com/antoniszczepanik/gggit/cmds"
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		utils.Usage("You need to specify a gggit command.")
+		common.Usage("You need to specify a gggit command.")
 	}
 	cmd := os.Args[1]
 	args := os.Args[2:]
@@ -38,6 +38,6 @@ func main() {
 	case "status":
 		cmds.Status(args)
 	default:
-		utils.Usage(fmt.Sprintf("Command %v is not available. Did you mean sth else?\n", cmd))
+		common.Usage(fmt.Sprintf("Command %v is not available. Did you mean sth else?\n", cmd))
 	}
 }

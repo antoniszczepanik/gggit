@@ -2,19 +2,23 @@ package refs
 
 import (
 	"errors"
+	"regexp"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/antoniszczepanik/gggit/utils"
+	"github.com/antoniszczepanik/gggit/common"
 	"github.com/antoniszczepanik/gggit/objects"
 )
 
 var ErrMissingRef = errors.New("HEAD points to a missing ref")
 
 var ErrDetachedHead = errors.New("HEAD is in detached mode")
+
+var refRegex = regexp.MustCompile(
+	`ref: refs/(?P<type>heads|tags|remotes)/(?P<name>[a-zA-Z1-9-_]+\n$)`,
+)
 
 type headPointer struct {
 	content string
@@ -30,11 +34,11 @@ func (hp headPointer) hash() (string, error) {
 	if isDetached {
 		return removeLastChar(hp.content), nil
 	}
-	refPath, err := parseRef(hp.content)
+	_, branchName, err := parseRef(hp.content)
 	if err != nil {
 		return "", err
 	}
-	return ReadHashFromRef(refPath)
+	return ReadBranchHash(branchName)
 }
 
 func (hp headPointer) detached() (bool, error) {
@@ -46,19 +50,19 @@ func (hp headPointer) detached() (bool, error) {
 	}
 	return true, nil
 }
-// Get ref path from contents of HEAD file.
-func parseRef(headContent string) (string, error) {
-	var refPath string
-	r := strings.NewReader(headContent)
-	_, err := fmt.Fscanf(r, "ref: %s\n", &refPath)
-	if err != nil {
-		return "", err
+
+// Parse from contents of HEAD file into ref type and ref name.
+func parseRef(headContent string) (string, string, error) {
+	match := refRegex.FindStringSubmatch(headContent)
+	if match == nil || len(match) != 3 {
+		fmt.Println(match, len(match))
+		return "", "", fmt.Errorf("error parsing ref: %s", headContent)
 	}
-	return refPath, nil
+	return match[1], match[2], nil
 }
 
 func readHeadPointer() (headPointer, error) {
-	f, err := utils.GetGitFile("HEAD")
+	f, err := common.GetGitFile("HEAD")
 	if err != nil {
 		return headPointer{}, err
 	}
@@ -71,23 +75,23 @@ func readHeadPointer() (headPointer, error) {
 }
 
 // Get path of the ref that HEAD is currently pointing at.
-func GetCurrentRefPath() (string, error) {
+func GetCurrentBranch() (string, error) {
 	hp, err := readHeadPointer()
 	if err != nil {
 		return "", err
 	}
 	isDetached, err := hp.detached()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("check if detached: %w", err)
 	}
 	if isDetached {
 		return "", ErrDetachedHead
 	}
-	refPath, err := parseRef(hp.content)
+	_, branchName, err := parseRef(hp.content)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse ref: %w", err)
 	}
-	return refPath, nil
+	return branchName, nil
 }
 
 func GetHeadTreeHash() (string, error){
@@ -110,15 +114,17 @@ func GetHeadCommitHash() (string, error) {
 	return head.hash()
 }
 
+var ErrBranchWithoutHash = errors.New("branch does not have any commits yet")
+
 // Returns empty string if ref does not exist yet.
-func ReadHashFromRef(refPath string) (string, error) {
-	ref, err := utils.GetGitFile(refPath)
-	if os.IsNotExist(err) {
-		return "", nil
-	} else if err != nil {
-		return "", err
+func ReadBranchHash(branchName string) (string, error) {
+	branchRefPath := getRefPath(branchName)
+	ref, err := common.GetGitFile(branchRefPath)
+	if err != nil{
+		return "", ErrBranchWithoutHash
 	}
 	defer ref.Close()
+
 	content, err := io.ReadAll(ref)
 	if err != nil {
 		return "", err
@@ -129,7 +135,7 @@ func ReadHashFromRef(refPath string) (string, error) {
 // Create new ref and return it's pointer. Caller is responsible for closing
 // the file.
 func CreateNewRef(name string) (*os.File, error) {
-	headsDir, err := utils.GetGitSubdir("refs/heads")
+	headsDir, err := common.GetGitSubdir("refs/heads")
 	if err != nil {
 		return nil, err
 	}
@@ -141,26 +147,30 @@ func CreateNewRef(name string) (*os.File, error) {
 	return newRefFile, nil
 }
 
-// Creates ref file if does not exists.
-func PointRefAt(refPath string, commitHash string) error {
-	filePath, err := utils.GetGitFilePath(refPath)
+// Point branch pointer at commit.
+func PointBranchAt(branchName, commitHash string) error {
+	branchRefPath := getRefPath(branchName)
+	branchRefPathAbs, err := common.GetGitFilePath(branchRefPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("point branch at commit: %w", err)
 	}
-	f, err := os.Create(filePath)
+
+	f, err := os.Create(branchRefPathAbs)
 	if err != nil {
-		return err
+		return fmt.Errorf("overwrite branch pointer file: %w", err)
 	}
 	defer f.Close()
+
 	_, err = f.Write([]byte(fmt.Sprintf("%s\n", commitHash)))
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func PointHeadAt(refPath string) error {
-	headPath, err := utils.GetGitFilePath("HEAD")
+func PointHeadAtBranch(branchName string) error {
+	headPath, err := common.GetGitFilePath("HEAD")
 	if err != nil {
 		return err
 	}
@@ -169,20 +179,16 @@ func PointHeadAt(refPath string) error {
 		return err
 	}
 	defer f.Close()
-	_, err = f.Write([]byte(fmt.Sprintf("ref: %s\n", refPath)))
+	_, err = f.Write([]byte(fmt.Sprintf("ref: %s\n", getRefPath(branchName))))
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func GetBranchRefPath(branchName string) string {
-	return "refs/heads/" + branchName
-}
-
 func Exists(branchName string) bool {
-	branchRefPath := GetBranchRefPath(branchName)
-	branchRefPathAbs, err := utils.GetGitFilePath(branchRefPath)
+	branchRefPath := getRefPath(branchName)
+	branchRefPathAbs, err := common.GetGitFilePath(branchRefPath)
 	if err != nil {
 		return false
 	}
@@ -190,6 +196,10 @@ func Exists(branchName string) bool {
 		return false
 	}
 	return true
+}
+
+func getRefPath(branchName string) string {
+	return "refs/heads/" + branchName
 }
 
 // Remove line feeds and whatnot.
