@@ -52,11 +52,11 @@ func initRepository(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	headf, err := os.Create(filepath.Join(gitdir, "HEAD"))
+	headFile, err := os.Create(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
 		return "", err
 	}
-	_, err = headf.WriteString("ref: refs/heads/master\n")
+	_, err = headFile.WriteString("ref: refs/heads/master")
 	if err != nil {
 		return "", err
 	}

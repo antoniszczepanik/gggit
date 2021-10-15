@@ -17,7 +17,7 @@ var ErrMissingRef = errors.New("HEAD points to a missing ref")
 var ErrDetachedHead = errors.New("HEAD is in detached mode")
 
 var refRegex = regexp.MustCompile(
-	`ref: refs/(?P<type>heads|tags|remotes)/(?P<name>[a-zA-Z1-9-_]+\n$)`,
+	`ref: refs/(?P<type>heads|tags|remotes)/(?P<name>[a-zA-Z1-9-_]+$)`,
 )
 
 type headPointer struct {
@@ -51,29 +51,6 @@ func (hp headPointer) detached() (bool, error) {
 	return true, nil
 }
 
-// Parse from contents of HEAD file into ref type and ref name.
-func parseRef(headContent string) (string, string, error) {
-	match := refRegex.FindStringSubmatch(headContent)
-	if match == nil || len(match) != 3 {
-		fmt.Println(match, len(match))
-		return "", "", fmt.Errorf("error parsing ref: %s", headContent)
-	}
-	return match[1], match[2], nil
-}
-
-func readHeadPointer() (headPointer, error) {
-	f, err := common.GetGitFile("HEAD")
-	if err != nil {
-		return headPointer{}, err
-	}
-	defer f.Close()
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return headPointer{}, err
-	}
-	return headPointer{content: string(content)}, nil
-}
-
 // Get path of the ref that HEAD is currently pointing at.
 func GetCurrentBranch() (string, error) {
 	hp, err := readHeadPointer()
@@ -93,6 +70,31 @@ func GetCurrentBranch() (string, error) {
 	}
 	return branchName, nil
 }
+
+func readHeadPointer() (headPointer, error) {
+	f, err := common.GetGitFile("HEAD")
+	if err != nil {
+		return headPointer{}, err
+	}
+	defer f.Close()
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return headPointer{}, err
+	}
+	return headPointer{content: string(content)}, nil
+}
+
+// Parse from contents of HEAD file into ref type and ref name.
+func parseRef(headContent string) (string, string, error) {
+	match := refRegex.FindStringSubmatch(headContent)
+	if match == nil || len(match) != 3 {
+		fmt.Printf("Cannot parse head content: %s\n", headContent)
+		return "", "", fmt.Errorf("parse head content: %s", headContent)
+	}
+	return match[1], match[2], nil
+}
+
+
 
 func GetHeadTreeHash() (string, error){
 	commitHash, err := GetHeadCommitHash()
@@ -179,7 +181,7 @@ func PointHeadAtBranch(branchName string) error {
 		return err
 	}
 	defer f.Close()
-	_, err = f.Write([]byte(fmt.Sprintf("ref: %s\n", getRefPath(branchName))))
+	_, err = f.Write([]byte(fmt.Sprintf("ref: %s", getRefPath(branchName))))
 	if err != nil {
 		return err
 	}
